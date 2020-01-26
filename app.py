@@ -1,9 +1,11 @@
 import json
-import sys
 import os
+import parse
 import requests
+import sys
 
 from copy import copy
+
 from flask import Flask, request
 from flask_heroku import Heroku
 from flask_sqlalchemy import SQLAlchemy
@@ -77,45 +79,53 @@ def webhook():
         return "ok", 200
 
     msg: str
-    scores: List[int]
+    parsed: List[Any] = []
     if sender not in admin:
         msg = "Lesser beings aren't granted such powers."
         print(msg)
     else:
-        scores, valid = validate_scoring(message)
-        if not valid:
-            msg = "Invalid. Must be `/score @A @B [@C @D] score1-score2`."
+        ok, parsed = parse.score_parse(text)
+        if not ok:
+            msg = """Invalid.
+            Must be `/score @A @B [@C @D] score1-score2`.
+            /score @A [[m1 s1]] @B [[m2 s2]]\
+               @C [[m3 s3]] @D [[m4 s4]] SCORE_AB [-,|] SCORE_CD"""
         else:
             msg = "Match recorded."
+            db = _process_data_for_db(parsed, message)
+            players = list(map(lambda x: x[0], db[:4]))
+            msg += f" Players identified are: {players}"
 
     if not app.debug:
         reply(msg)
     else:
         print(msg)
-        print(scores)
+        print(parsed)
     print(message)
     return "ok", 200
 
 
-def _process_data_for_db(message):
-    sender: str = message.get('sender_id', None)
-    text: str = message.get('text', None)
+def _process_data_for_db(parsed, message):
+    ids_var = os.getenv('IDS').split(':')
+    convert_dict = dict()
+    for id_name in ids_var:
+        id, name = id_name.split('-')
+        convert_dict[id] = name
 
-    try:
-        mentions: List[str] = message.get('attachments')[0]['user_ids']
-    except IndexError as e:
-        print("You must tag all players.")
-        return "You must tag all players.", False
+    parsed_mentions = parsed[:4]
+    me = message.get('sender_id', None)
+    mentions = message.get('attachments', [{}])[0].get('user_ids', [])
 
-    words: List[str] = message.get('text').split(' ')
-    players = list(map(lambda y: y.lower(),
-                       filter(lambda x: x.startswith('@'), words)))
+    people = list(map(lambda x: x[0], parsed_mentions))
+    j: int = 0
+    for i, person in enumerate(people):
+        if person.lower() == "me":
+            parsed[i][0] = convert_dict[me]
+        else:
+            parsed[i][0] = convert_dict[mentions[j]]
+            j += 1
 
-    if len(players) != 4:
-        print("We do not support 1 v. 1 matches at this time.")
-        return "We do not support 1 v. 1 matches at this time.", False
-
-
+    return parsed
 
 
 def add_to_db(team_1, team_2, score_1, score_2, mugs_1, mugs_2):
@@ -133,34 +143,25 @@ def add_to_db(team_1, team_2, score_1, score_2, mugs_1, mugs_2):
     return True
 
 
-def validate_scoring(message: Dict[str, Any]):
-    mentions: List[str] = message.get('attachments')[0]['user_ids']
-    words: List[str] = message.get('text').split(' ')
+# def validate_scoring(message: Dict[str, Any]):
+#     mentions: List[str] = message.get('attachments')[0]['user_ids']
+#     words: List[str] = message.get('text').split(' ')
 
-    players = list(map(lambda y: y.lower(),
-                       filter(lambda x: x.startswith('@'), words)))
-    if app.debug:
-        print(f"players: {players}")
-        print(f"mentions: {mentions}")
+#     players = list(map(lambda y: y.lower(),
+#                        filter(lambda x: x.startswith('@'), words)))
+#     if app.debug:
+#         print(f"players: {players}")
+#         print(f"mentions: {mentions}")
 
-    # Accounts for 1v1 or 2v2
-    if '@me' in players:
-        if (len(mentions) + 1) != len(players) or len(players) not in [2, 4]:
-            return None, False
-    else:
-        if (len(players) != len(mentions)) or len(players) not in [2, 4]:
-            return None, False
+#     # Accounts for 1v1 or 2v2
+#     if '@me' in players:
+#         if (len(mentions) + 1) != len(players) or len(players) not in [2, 4]:
+#             return False
+#     else:
+#         if (len(players) != len(mentions)) or len(players) not in [2, 4]:
+#             return False
 
-    score: List[str] = message.get('text').split('-')
-    score_a, score_b = score[0][-2:], score[1][:2]
-
-    try:
-        score_a = int(score_a)
-        score_b = int(score_b)
-    except ValueError:
-        return None, False
-
-    return (score_a, score_b), True
+#     return True
 
 
 # Send a message in the groupchat
