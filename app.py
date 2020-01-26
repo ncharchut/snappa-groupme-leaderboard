@@ -1,5 +1,4 @@
 import os
-# import json
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from flask import Flask, request
@@ -13,38 +12,43 @@ app = Flask(__name__)
 def webhook():
     # 'message' is an object that represents a single GroupMe message.
     message: Dict[str, Any] = request.get_json()
-    admin: List[str] = os.environ.get('ADMIN').split(':')
+    admin: List[str] = os.getenv('ADMIN').split(':')
 
     sender: str = message.get('sender_id', None)
     text: str = message.get('text', None)
 
     if not text.startswith("/score"):
-        print("don't care!")
+        print("Don't care.")
         return "ok", 200
 
     msg: str
     if sender not in admin:
         msg = "Lesser beings aren't granted such powers."
     else:
+        valid: bool = validate_scoring(message)
+        print(valid)
         msg = "Match recorded."
 
     reply(msg)
     return "ok", 200
 
 
+def validate_scoring(message: Dict[str, Any]) -> bool:
+    print(message)
+    pass
+
+
 # Send a message in the groupchat
 def reply(msg):
     url = 'https://api.groupme.com/v3/bots/post'
-    data = {'bot_id': os.environ.get('BOT_ID', None),
+    data = {'bot_id': os.getenv('BOT_ID'),
             'text': msg}
     if data['bot_id'] is None:
-        print("Set BOT_ID environment variable")
+        print("BOT_ID environment variable not set. Please configure with\
+              `heroku config:set BOT_ID=ID`.")
         return
 
-    # print(data)
     request = Request(url, urlencode(data).encode())
-    # response = requests.post(url, data)
-    # print(response.text)
     json = urlopen(request).read().decode()
     print(json)
 
