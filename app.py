@@ -39,6 +39,7 @@ def webhook():
     else:
         print(msg)
         print(scores)
+    print(message)
     return "ok", 200
 
 
