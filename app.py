@@ -6,6 +6,7 @@ import requests
 from typing import Any, List, Dict
 
 app = Flask(__name__)
+DEBUG = False
 
 
 @app.route('/', methods=['POST'])
@@ -22,20 +23,46 @@ def webhook():
         return "ok", 200
 
     msg: str
+    scores: List[int]
     if sender not in admin:
         msg = "Lesser beings aren't granted such powers."
+        print(msg)
     else:
-        valid: bool = validate_scoring(message)
-        print(valid)
-        msg = "Match recorded."
+        scores, valid = validate_scoring(message)
+        if not valid:
+            msg = "Invalid. Must be `/score @A @B [@C @D] score1-score2`."
+        else:
+            msg = "Match recorded."
 
-    reply(msg)
+    if not DEBUG:
+        reply(msg)
+    else:
+        print(msg)
+        print(scores)
     return "ok", 200
 
 
-def validate_scoring(message: Dict[str, Any]) -> bool:
-    print(message)
-    pass
+def validate_scoring(message: Dict[str, Any]):
+    mentions: List[str] = message.get('attachments')[0]['user_ids']
+    words: List[str] = message.get('text').split(' ')
+
+    players = list(filter(lambda x: x.startswith('@'), words))
+
+    # Accounts for 1v1 or 2v2
+    if (len(players) / 2) not in [1, 2] or\
+            (len(mentions) / 2) not in [1, 2]:
+        return None, False
+
+    score: List[str] = message.get('text').split('-')
+    score_a, score_b = score[0][-2:], score[1][:2]
+
+    try:
+        score_a = int(score_a)
+        score_b = int(score_b)
+    except ValueError:
+        return None, False
+
+    return (score_a, score_b), True
 
 
 # Send a message in the groupchat
