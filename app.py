@@ -55,6 +55,8 @@ class Score(db.Model):
         self.player_4 = player_4
         self.mugs_1, self.mugs_2, self.mugs_3, self.mugs_4 = mugs
         self.sinks_1, self.sinks_2, self.sinks_3, self.sinks_4 = sinks
+        self.score_12 = score_12
+        self.score_34 = score_34
 
     def __repr__(self):
         return f"<id {self.id}>"
@@ -130,7 +132,11 @@ def _process_data_for_db(parsed, message):
     # Get it primed for the database.
     parsed = list(parsed)
     players = [list(parsed[i]) for i in range(4)]
-    score_12, score_34 = parsed[-1]
+    print("SCORE")
+    print(list(parsed[-1]))
+    score_12, score_34 = list(parsed[-1])
+    print(score_12, score_34)
+
     player_1, player_2, player_3, player_4 = list(map(lambda x: x[0],
                                                       players))
     mugs = list(map(lambda x: 0 if len(x) == 1 else x[1], players))
@@ -216,5 +222,5 @@ def sender_is_bot(message):
 
 
 if __name__ == "__main__":
-    app.debug = False
+    app.debug = True
     app.run(host='0.0.0.0')
