@@ -47,12 +47,18 @@ def validate_scoring(message: Dict[str, Any]):
     mentions: List[str] = message.get('attachments')[0]['user_ids']
     words: List[str] = message.get('text').split(' ')
 
-    players = list(filter(lambda x: x.startswith('@'), words))
+    players = list(map(lambda y: y.lower(),
+                       filter(lambda x: x.startswith('@'), words)))
+    print(f"players: {players}")
+    print(f"mentions: {mentions}")
 
     # Accounts for 1v1 or 2v2
-    if (len(players) / 2) not in [1, 2] or\
-            (len(mentions) / 2) not in [1, 2]:
-        return None, False
+    if '@me' in players:
+        if (len(mentions) + 1) != len(players) or len(players) not in [2, 4]:
+            return None, False
+    else:
+        if (len(players) != len(mentions)) or len(players) not in [2, 4]:
+            return None, False
 
     score: List[str] = message.get('text').split('-')
     score_a, score_b = score[0][-2:], score[1][:2]
