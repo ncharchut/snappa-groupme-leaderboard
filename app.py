@@ -4,32 +4,47 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from flask import Flask, request
 import requests
+from typing import Any, List, Dict
 
 app = Flask(__name__)
-bot_id = "a6c28ab43d7e95d98a7ce1fd6f "
 
 
 @app.route('/', methods=['POST'])
 def webhook():
     # 'message' is an object that represents a single GroupMe message.
-    message = request.get_json()
-    print(message)
-    # print(f"name: {message['name']}")
-    # print(f"msg : {message['text']}")
-    # print(f"name: {request.args['name']}")
-    # print(f"msg : {request.args['text']}")
+    message: Dict[str, Any] = request.get_json()
+    admin: List[str] = os.environ.get('ADMIN').split(':')
 
-    # TODO: Your bot's logic here
+    sender: str = message.get('sender_id', None)
+    text: str = message.get('text', None)
 
+    if not text.startswith("/score"):
+        print("don't care!")
+        return "ok", 200
+
+    msg: str
+    if sender not in admin:
+        msg = "Lesser beings aren't granted such powers."
+    else:
+        msg = "Match recorded."
+
+    reply(msg)
     return "ok", 200
 
 
 # Send a message in the groupchat
 def reply(msg):
     url = 'https://api.groupme.com/v3/bots/post'
-    data = {'bot_id': bot_id,
+    data = {'bot_id': os.environ.get('BOT_ID', None),
             'text': msg}
+    if data['bot_id'] is None:
+        print("Set BOT_ID environment variable")
+        return
+
+    # print(data)
     request = Request(url, urlencode(data).encode())
+    # response = requests.post(url, data)
+    # print(response.text)
     json = urlopen(request).read().decode()
     print(json)
 
@@ -38,7 +53,7 @@ def reply(msg):
 def reply_with_image(msg, imgURL):
     url = 'https://api.groupme.com/v3/bots/post'
     urlOnGroupMeService = upload_image_to_groupme(imgURL)
-    data = {'bot_id':      bot_id,
+    data = {'bot_id':      os.environ.get('BOT_ID', None),
             'text':        msg,
             'picture_url': urlOnGroupMeService}
     request = Request(url, urlencode(data).encode())
