@@ -35,7 +35,7 @@ class Score(db.Model):
     score_12 = db.Column(db.Integer)
     score_34 = db.Column(db.Integer)
 
-    # Mug taps per player
+    # Mug taps for all players.
     mugs_1 = db.Column(db.Integer)
     mugs_2 = db.Column(db.Integer)
     mugs_3 = db.Column(db.Integer)
@@ -47,12 +47,12 @@ class Score(db.Model):
     sinks_3 = db.Column(db.Integer)
     sinks_4 = db.Column(db.Integer)
 
-    def __init__(self, team_1, team_2, score_1, score_2, mugs=(0, 0, 0, 0),
-                 sinks=(0, 0, 0, 0)):
-        self.player_1, self.player_2 = team_1
-        self.player_3, self.player_4 = team_2
-        self.score_12 = score_1
-        self.score_34 = score_2
+    def __init__(self, player_1, player_2, player_3, player_4,
+                 score_12, score_34, mugs, sinks):
+        self.player_1 = player_1
+        self.player_2 = player_2
+        self.player_3 = player_3
+        self.player_4 = player_4
         self.mugs_1, self.mugs_2, self.mugs_3, self.mugs_4 = mugs
         self.sinks_1, self.sinks_2, self.sinks_3, self.sinks_4 = sinks
 
@@ -84,7 +84,7 @@ def webhook():
         msg = "Lesser beings aren't granted such powers."
         print(msg)
     else:
-        ok, parsed = parse.score_parse(text)
+        (ok, parsed) = parse.score_parse(text)
         if not ok:
             msg = """Invalid.
             Must be `/score @A @B [@C @D] score1-score2`.
@@ -92,6 +92,7 @@ def webhook():
                @C [[m3 s3]] @D [[m4 s4]] SCORE_AB [-,|] SCORE_CD"""
         else:
             msg = "Match recorded."
+            print(parsed)
             db = _process_data_for_db(parsed, message)
             players = list(map(lambda x: x[0], db[:4]))
             msg += f" Players identified are: {players}"
@@ -112,6 +113,7 @@ def _process_data_for_db(parsed, message):
         id, name = id_name.split('-')
         convert_dict[id] = name
 
+    # Convert nicknames to actual names.
     parsed_mentions = parsed[:4]
     me = message.get('sender_id', None)
     mentions = message.get('attachments', [{}])[0].get('user_ids', [])
@@ -125,11 +127,28 @@ def _process_data_for_db(parsed, message):
             parsed[i][0] = convert_dict[mentions[j]]
             j += 1
 
+    # Get it primed for the database.
+    parsed = list(parsed)
+    players = [list(parsed[i]) for i in range(4)]
+    score_12, score_34 = parsed[-1]
+    player_1, player_2, player_3, player_4 = list(map(lambda x: x[0],
+                                                      players))
+    mugs = list(map(lambda x: 0 if len(x) == 1 else x[1], players))
+    sinks = list(map(lambda x: 0 if len(x) == 1 else x[2], players))
+    ok = add_to_db(player_1, player_2, player_3, player_4,
+                   score_12, score_34, mugs, sinks)
+    if ok:
+        print("Yay!")
+    else:
+        print("NOOOO :(")
+
     return parsed
 
 
-def add_to_db(team_1, team_2, score_1, score_2, mugs_1, mugs_2):
-    indata = Score(team_1, team_2, score_1, score_2, mugs_1, mugs_2)
+def add_to_db(player, partner, opponent_1, opponent_2,
+              score, opp_score, mugs, sinks):
+    indata = Score(player, partner, opponent_1, opponent_2,
+                   score, opp_score, mugs, sinks)
     data = copy(indata.__dict__)
     del data["_sa_instance_state"]
     try:
@@ -141,27 +160,6 @@ def add_to_db(team_1, team_2, score_1, score_2, mugs_1, mugs_2):
         sys.stdout.flush()
         return False
     return True
-
-
-# def validate_scoring(message: Dict[str, Any]):
-#     mentions: List[str] = message.get('attachments')[0]['user_ids']
-#     words: List[str] = message.get('text').split(' ')
-
-#     players = list(map(lambda y: y.lower(),
-#                        filter(lambda x: x.startswith('@'), words)))
-#     if app.debug:
-#         print(f"players: {players}")
-#         print(f"mentions: {mentions}")
-
-#     # Accounts for 1v1 or 2v2
-#     if '@me' in players:
-#         if (len(mentions) + 1) != len(players) or len(players) not in [2, 4]:
-#             return False
-#     else:
-#         if (len(players) != len(mentions)) or len(players) not in [2, 4]:
-#             return False
-
-#     return True
 
 
 # Send a message in the groupchat
