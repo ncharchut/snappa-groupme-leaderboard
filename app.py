@@ -1,12 +1,65 @@
+import json
+import sys
 import os
+import requests
+
+from copy import copy
+from flask import Flask, request
+from flask_heroku import Heroku
+from flask_sqlalchemy import SQLAlchemy
+from typing import Any, List, Dict
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
-from flask import Flask, request
-import requests
-from typing import Any, List, Dict
 
+# from flask import Flask, render_template, url_for
 app = Flask(__name__)
-DEBUG = False
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+heroku = Heroku(app)
+db = SQLAlchemy(app)
+
+
+class Score(db.Model):
+    """ Schema for score submission for a given match. """
+    __tablename__ = 'snappa-scores'
+
+    id = db.Column(db.Integer, primary_key=True)
+    # Player id's
+    player_1 = db.Column(db.String())
+    player_2 = db.Column(db.String())
+    player_3 = db.Column(db.String())
+    player_4 = db.Column(db.String())
+
+    # Team Scores
+    score_12 = db.Column(db.Integer)
+    score_34 = db.Column(db.Integer)
+
+    # Mug taps per player
+    mugs_1 = db.Column(db.Integer)
+    mugs_2 = db.Column(db.Integer)
+    mugs_3 = db.Column(db.Integer)
+    mugs_4 = db.Column(db.Integer)
+
+    # Sinks per player
+    sinks_1 = db.Column(db.Integer)
+    sinks_2 = db.Column(db.Integer)
+    sinks_3 = db.Column(db.Integer)
+    sinks_4 = db.Column(db.Integer)
+
+    def __init__(self, team_1, team_2, score_1, score_2, mugs=(0, 0, 0, 0),
+                 sinks=(0, 0, 0, 0)):
+        self.player_1, self.player_2 = team_1
+        self.player_3, self.player_4 = team_2
+        self.score_12 = score_1
+        self.score_34 = score_2
+        self.mugs_1, self.mugs_2, self.mugs_3, self.mugs_4 = mugs
+        self.sinks_1, self.sinks_2, self.sinks_3, self.sinks_4 = sinks
+
+    def __repr__(self):
+        return f"<id {self.id}>"
+
+    def __team_of_two(self, team):
+        """ Will be used when database supports 1 v. 1 matches. """
+        return isinstance(team, list) or isinstance(team, tuple)
 
 
 @app.route('/', methods=['POST'])
@@ -19,6 +72,7 @@ def webhook():
     text: str = message.get('text', None)
 
     if not text.startswith("/score"):
+        print(message)
         print("Don't care.")
         return "ok", 200
 
@@ -34,7 +88,7 @@ def webhook():
         else:
             msg = "Match recorded."
 
-    if not DEBUG:
+    if not app.debug:
         reply(msg)
     else:
         print(msg)
@@ -43,14 +97,51 @@ def webhook():
     return "ok", 200
 
 
+def _process_data_for_db(message):
+    sender: str = message.get('sender_id', None)
+    text: str = message.get('text', None)
+
+    try:
+        mentions: List[str] = message.get('attachments')[0]['user_ids']
+    except IndexError as e:
+        print("You must tag all players.")
+        return "You must tag all players.", False
+
+    words: List[str] = message.get('text').split(' ')
+    players = list(map(lambda y: y.lower(),
+                       filter(lambda x: x.startswith('@'), words)))
+
+    if len(players) != 4:
+        print("We do not support 1 v. 1 matches at this time.")
+        return "We do not support 1 v. 1 matches at this time.", False
+
+
+
+
+def add_to_db(team_1, team_2, score_1, score_2, mugs_1, mugs_2):
+    indata = Score(team_1, team_2, score_1, score_2, mugs_1, mugs_2)
+    data = copy(indata.__dict__)
+    del data["_sa_instance_state"]
+    try:
+        db.session.add(indata)
+        db.session.commit()
+    except Exception as e:
+        print(f"FAILED entry: {json.dumps(data)}\n")
+        print(e)
+        sys.stdout.flush()
+        return False
+    return True
+
+
 def validate_scoring(message: Dict[str, Any]):
     mentions: List[str] = message.get('attachments')[0]['user_ids']
     words: List[str] = message.get('text').split(' ')
 
     players = list(map(lambda y: y.lower(),
                        filter(lambda x: x.startswith('@'), words)))
-    print(f"players: {players}")
-    print(f"mentions: {mentions}")
+    if app.debug:
+        print(f"players: {players}")
+        print(f"mentions: {mentions}")
 
     # Accounts for 1v1 or 2v2
     if '@me' in players:
@@ -83,8 +174,8 @@ def reply(msg):
         return
 
     request = Request(url, urlencode(data).encode())
-    json = urlopen(request).read().decode()
-    print(json)
+    response = urlopen(request).read().decode()
+    print(response)
 
 
 # Send a message with an image attached in the groupchat
@@ -95,8 +186,8 @@ def reply_with_image(msg, imgURL):
             'text':        msg,
             'picture_url': urlOnGroupMeService}
     request = Request(url, urlencode(data).encode())
-    json = urlopen(request).read().decode()
-    print(json)
+    response = urlopen(request).read().decode()
+    print(response)
 
 
 # Uploads image to GroupMe's services and returns the new URL
@@ -126,4 +217,5 @@ def sender_is_bot(message):
 
 
 if __name__ == "__main__":
+    app.debug = False
     app.run(host='0.0.0.0')
