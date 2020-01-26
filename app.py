@@ -13,10 +13,11 @@ bot_id = "a6c28ab43d7e95d98a7ce1fd6f "
 def webhook():
     # 'message' is an object that represents a single GroupMe message.
     message = request.get_json()
-    print(f"name: {message['name']}")
-    print(f"msg : {message['text']}")
-    print(f"name: {request.args['name']}")
-    print(f"msg : {request.args['text']}")
+    print(message)
+    # print(f"name: {message['name']}")
+    # print(f"msg : {message['text']}")
+    # print(f"name: {request.args['name']}")
+    # print(f"msg : {request.args['text']}")
 
     # TODO: Your bot's logic here
 
