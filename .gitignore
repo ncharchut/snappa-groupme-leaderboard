@@ -1,0 +1,9 @@
+**.swo
+**.swp
+
+Pipfile
+Pipfile.lock
+
+resources/
+.env
+__pycache__
