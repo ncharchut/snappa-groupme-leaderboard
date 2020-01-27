@@ -26,15 +26,15 @@ def score_parse(raw_string):
     # Tagging a user with optional mugs and sinks.
     mention = Suppress('@') +\
         OneOrMore(Word(alphanums)).setParseAction(' '.join)
+    points_sinks = Optional(Suppress(Word('[(')) +
+                            score + score_delims + Optional(score) +
+                            Suppress(Word('])'))).setParseAction(cmn.convertToInteger)
     total_score = score + score_delims + score
-    mugs_sinks = Optional(Suppress('[') +
-                          total_score +
-                          Suppress(']')).setParseAction(cmn.convertToInteger)
-    mentions = OneOrMore(Group(mention + mugs_sinks))
+    mentions = OneOrMore(Group(mention + points_sinks))
 
     # Putting it all together.
     score_parse = init +\
-        mentions + Suppress(Optional(Word(",|"))) + Group(total_score)
+        mentions + Suppress(Optional(Word(",|.;/"))) + Group(total_score)
     try:
         res = score_parse.parseString(raw_string)
         return True, res
@@ -44,7 +44,6 @@ def score_parse(raw_string):
 
 
 if __name__ == "__main__":
-    string = "/sCoRe @tommy long cock [4 5] @bo [4 3] @me @you [3-5] 6 7"
-    # string = "/score @Zack Klopstein [3-0] @Tommy Shannan @me [1 2] @Bo Hardon 3  7"
+    string = "/sCoRe @tommy [4] @bo [4 3] @me @you [3-5] 6 7"
     _, res = score_parse(string)
     print(res)

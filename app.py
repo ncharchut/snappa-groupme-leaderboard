@@ -1,6 +1,7 @@
 import json
 import os
 import parse
+import psycopg2
 import requests
 import sys
 
@@ -25,38 +26,42 @@ class Score(db.Model):
     __tablename__ = 'snappa-scores'
 
     id = db.Column(db.Integer, primary_key=True)
-    # Player id's
+    # Player id's.
     player_1 = db.Column(db.String())
     player_2 = db.Column(db.String())
     player_3 = db.Column(db.String())
     player_4 = db.Column(db.String())
 
-    # Team Scores
+    # Team scores.
     score_12 = db.Column(db.Integer)
     score_34 = db.Column(db.Integer)
 
-    # Mug taps for all players.
-    mugs_1 = db.Column(db.Integer)
-    mugs_2 = db.Column(db.Integer)
-    mugs_3 = db.Column(db.Integer)
-    mugs_4 = db.Column(db.Integer)
+    # Points for all players.
+    points_1 = db.Column(db.Integer)
+    points_2 = db.Column(db.Integer)
+    points_3 = db.Column(db.Integer)
+    points_4 = db.Column(db.Integer)
 
-    # Sinks per player
+    # Sinks per player.
     sinks_1 = db.Column(db.Integer)
     sinks_2 = db.Column(db.Integer)
     sinks_3 = db.Column(db.Integer)
     sinks_4 = db.Column(db.Integer)
 
+    # Timestamp for the match.
+    timestamp = db.Column(db.Integer)
+
     def __init__(self, player_1, player_2, player_3, player_4,
-                 score_12, score_34, mugs, sinks):
+                 score_12, score_34, points, sinks, timestamp):
         self.player_1 = player_1
         self.player_2 = player_2
         self.player_3 = player_3
         self.player_4 = player_4
-        self.mugs_1, self.mugs_2, self.mugs_3, self.mugs_4 = mugs
+        self.points_1, self.points_2, self.points_3, self.points_4 = points
         self.sinks_1, self.sinks_2, self.sinks_3, self.sinks_4 = sinks
         self.score_12 = score_12
         self.score_34 = score_34
+        self.timestamp = timestamp
 
     def __repr__(self):
         return f"<id {self.id}>"
@@ -119,6 +124,7 @@ def _process_data_for_db(parsed, message):
     parsed_mentions = parsed[:4]
     me = message.get('sender_id', None)
     mentions = message.get('attachments', [{}])[0].get('user_ids', [])
+    timestamp = message.get('created_at', None)
 
     people = list(map(lambda x: x[0], parsed_mentions))
     j: int = 0
@@ -132,32 +138,41 @@ def _process_data_for_db(parsed, message):
     # Get it primed for the database.
     parsed = list(parsed)
     players = [list(parsed[i]) for i in range(4)]
-    print("SCORE")
-    print(list(parsed[-1]))
     score_12, score_34 = list(parsed[-1])
-    print(score_12, score_34)
 
     player_1, player_2, player_3, player_4 = list(map(lambda x: x[0],
                                                       players))
     mugs = list(map(lambda x: 0 if len(x) == 1 else x[1], players))
     sinks = list(map(lambda x: 0 if len(x) == 1 else x[2], players))
     ok = add_to_db(player_1, player_2, player_3, player_4,
-                   score_12, score_34, mugs, sinks)
+                   score_12, score_34, mugs, sinks, timestamp)
     if ok:
-        print("Yay!")
+        generate_leaderboard()
     else:
         print("NOOOO :(")
 
     return parsed
 
 
+def generate_leaderboard():
+    DATABASE_URL = os.environ['DATABASE_URL']
+    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM "snappa-scores"')
+    rows = cursor.fetchall()
+    for r in rows:
+        print(r)
+
+
 def add_to_db(player, partner, opponent_1, opponent_2,
-              score, opp_score, mugs, sinks):
+              score, opp_score, mugs, sinks, timestamp):
     indata = Score(player, partner, opponent_1, opponent_2,
-                   score, opp_score, mugs, sinks)
+                   score, opp_score, mugs, sinks, timestamp)
     data = copy(indata.__dict__)
     del data["_sa_instance_state"]
     try:
+        if app.debug:
+            return True
         db.session.add(indata)
         db.session.commit()
     except Exception as e:
@@ -222,5 +237,5 @@ def sender_is_bot(message):
 
 
 if __name__ == "__main__":
-    app.debug = True
+    app.debug = False
     app.run(host='0.0.0.0')
