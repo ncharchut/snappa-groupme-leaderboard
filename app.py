@@ -1,3 +1,4 @@
+import csv
 import json
 import os
 import parse
@@ -14,66 +15,17 @@ from typing import Any, List, Dict
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-# from flask import Flask, render_template, url_for
 app = Flask(__name__)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 heroku = Heroku(app)
 db = SQLAlchemy(app)
+init_rank = True
 
-
-class Score(db.Model):
-    """ Schema for score submission for a given match. """
-    __tablename__ = 'snappa-scores'
-
-    id = db.Column(db.Integer, primary_key=True)
-    # Player id's.
-    player_1 = db.Column(db.String())
-    player_2 = db.Column(db.String())
-    player_3 = db.Column(db.String())
-    player_4 = db.Column(db.String())
-
-    # Team scores.
-    score_12 = db.Column(db.Integer)
-    score_34 = db.Column(db.Integer)
-
-    # Points for all players.
-    points_1 = db.Column(db.Integer)
-    points_2 = db.Column(db.Integer)
-    points_3 = db.Column(db.Integer)
-    points_4 = db.Column(db.Integer)
-
-    # Sinks per player.
-    sinks_1 = db.Column(db.Integer)
-    sinks_2 = db.Column(db.Integer)
-    sinks_3 = db.Column(db.Integer)
-    sinks_4 = db.Column(db.Integer)
-
-    # Timestamp for the match.
-    timestamp = db.Column(db.Integer)
-
-    def __init__(self, player_1, player_2, player_3, player_4,
-                 score_12, score_34, points, sinks, timestamp):
-        self.player_1 = player_1
-        self.player_2 = player_2
-        self.player_3 = player_3
-        self.player_4 = player_4
-        self.points_1, self.points_2, self.points_3, self.points_4 = points
-        self.sinks_1, self.sinks_2, self.sinks_3, self.sinks_4 = sinks
-        self.score_12 = score_12
-        self.score_34 = score_34
-        self.timestamp = timestamp
-
-    def __repr__(self):
-        return f"<id {self.id}>"
-
-    def __team_of_two(self, team):
-        """ Will be used when database supports 1 v. 1 matches. """
-        return isinstance(team, list) or isinstance(team, tuple)
+# from models import Score, Rank  # NOQA
 
 
 @app.route('/', methods=['POST'])
 def webhook():
-    # 'message' is an object that represents a single GroupMe message.
     message: Dict[str, Any] = request.get_json()
     admin: List[str] = os.getenv('ADMIN').split(':')
 
@@ -81,9 +33,12 @@ def webhook():
     text: str = message.get('text', None)
 
     if not text.startswith("/score"):
-        print(message)
         print("Don't care.")
         return "ok", 200
+
+    # Initialize the rankings DB. Should only happen once.
+    if init_rank:
+        __init_rankings('resources/groupme_ids_to_names.csv')
 
     msg: str
     parsed: List[Any] = []
@@ -94,9 +49,9 @@ def webhook():
         (ok, parsed) = parse.score_parse(text)
         if not ok:
             msg = """Invalid.
-            Must be `/score @A @B [@C @D] score1-score2`.
-            /score @A [[m1 s1]] @B [[m2 s2]]\
-               @C [[m3 s3]] @D [[m4 s4]] SCORE_AB [-,|] SCORE_CD"""
+            Must be `/score @A @B [@C @D] score1-score2` or\n
+            `/score @A [p1 s1] @B [p2 s2]\
+               @C [p3 s3] @D [p4 s4] SCORE_AB , SCORE_CD`"""
         else:
             msg = "Match recorded."
             print(parsed)
@@ -183,6 +138,29 @@ def add_to_db(player, partner, opponent_1, opponent_2,
     return True
 
 
+def __init_rankings(file: str):
+    """ Uses a csv file of GroupMe IDs to real names to initialize
+    the database. """
+    with open(file, 'r') as groupme_ids:
+        reader = csv.reader(groupme_ids)
+        for line in reader:
+            groupme_id, name = line
+            # Initial rankings are all 1 for now.
+            indata = Rank(groupme_id, name, 1)
+            data = copy(indata.__dict__)
+            del data["_sa_instance_state"]
+            try:
+                if app.debug:
+                    return True
+                db.session.add(indata)
+                db.session.commit()
+            except Exception as e:
+                print(f"FAILED entry: {json.dumps(data)}\n")
+                print(e)
+                sys.stdout.flush()
+                return False
+
+
 # Send a message in the groupchat
 def reply(msg):
     url = 'https://api.groupme.com/v3/bots/post'
@@ -234,6 +212,85 @@ def upload_image_to_groupme(imgURL):
 # Checks whether the message sender is a bot
 def sender_is_bot(message):
     return message['sender_type'] == "bot"
+
+
+# I tried moving these to a different file but got a circular import
+# no matter what :(
+class Score(db.Model):
+    """ Schema for score submission for a given match. """
+    __tablename__ = 'snappa-scores'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Player id's.
+    player_1 = db.Column(db.String())
+    player_2 = db.Column(db.String())
+    player_3 = db.Column(db.String())
+    player_4 = db.Column(db.String())
+
+    # Team scores.
+    score_12 = db.Column(db.Integer)
+    score_34 = db.Column(db.Integer)
+
+    # Points for all players.
+    points_1 = db.Column(db.Integer, default=0)
+    points_2 = db.Column(db.Integer, default=0)
+    points_3 = db.Column(db.Integer, default=0)
+    points_4 = db.Column(db.Integer, default=0)
+
+    # Sinks per player.
+    sinks_1 = db.Column(db.Integer, default=0)
+    sinks_2 = db.Column(db.Integer, default=0)
+    sinks_3 = db.Column(db.Integer, default=0)
+    sinks_4 = db.Column(db.Integer, default=0)
+
+    # Timestamp for the match.
+    timestamp = db.Column(db.Integer)
+
+    def __init__(self, player_1, player_2, player_3, player_4,
+                 score_12, score_34, points, sinks, timestamp):
+        self.player_1 = player_1
+        self.player_2 = player_2
+        self.player_3 = player_3
+        self.player_4 = player_4
+        self.points_1, self.points_2, self.points_3, self.points_4 = points
+        self.sinks_1, self.sinks_2, self.sinks_3, self.sinks_4 = sinks
+        self.score_12 = score_12
+        self.score_34 = score_34
+        self.timestamp = timestamp
+
+    def __repr__(self):
+        return f"<id {self.id}>"
+
+    def __team_of_two(self, team):
+        """ Will be used when database supports 1 v. 1 matches. """
+        return isinstance(team, list) or isinstance(team, tuple)
+
+
+class Rank(db.Model):
+    """ Schema for people and rankings. """
+    __tablename__ = 'rankings'
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Player information.
+    player_id = db.Column(db.String())
+    name = db.Column(db.String())
+    rank = db.Column(db.Integer)
+
+    # Career stats.
+    games = db.Column(db.Integer, default=0)
+    wins = db.Column(db.Integer, default=0)
+    losses = db.Column(db.Integer, default=0)
+    points = db.Column(db.Integer, default=0)
+    sinks = db.Column(db.Integer, default=0)
+
+    def __init__(self, player_id, name, initial_rank):
+        self.player_id = player_id
+        self.name = name
+        self.rank = initial_rank
+
+    def __repr__(self):
+        return f"<id {self.id}>"
 
 
 if __name__ == "__main__":
