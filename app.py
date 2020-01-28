@@ -1,6 +1,8 @@
+import csv
 import json
 import os
 import parse
+import random
 import requests
 import sys
 
@@ -9,6 +11,7 @@ from copy import copy
 from flask import Flask, request
 from flask_heroku import Heroku
 from flask_sqlalchemy import SQLAlchemy
+from textblob import TextBlob
 from typing import Any, List, Dict
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -41,6 +44,15 @@ def webhook():
     elif (text.startswith("/leaderboard") or
           text.startswith("/lb")):
         msg = generate_leaderboard()
+    elif "scorebot" in text.lower():
+        blob = TextBlob(text)
+        polarity, subjectivity = blob.sentiment
+        if polarity < -0.3:
+            msg = get_emotional_response('bad')
+        elif polarity < 0.3:
+            msg = get_emotional_response('neutral')
+        else:
+            msg = get_emotional_response('good')
     else:
         print("Don't care.")
         return "ok", 200
@@ -55,6 +67,15 @@ def webhook():
 
     print(msg)
     return "ok", 200
+
+def get_emotional_response(level):
+    file = f"resources/responses/{level}.csv"
+    response = ''
+    with open(file, 'r') as responses:
+        reader = list(csv.reader(responses))
+        response = random.choice(reader)[0]
+
+    return response
 
 
 def score(message):
@@ -344,5 +365,5 @@ class Rank(db.Model):
 
 
 if __name__ == "__main__":
-    app.debug = False
+    app.debug = True
     app.run(host='0.0.0.0')
