@@ -14,10 +14,8 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 app = Flask(__name__)
-# app.debug = False
 
 if app.debug:
-    print("HERE")
     app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -53,28 +51,31 @@ def webhook():
         __init_rankings()
 
     if not app.debug:
-        print(msg)
         reply(msg)
-    else:
-        print(msg)
 
-    print(message)
+    print(msg)
     return "ok", 200
 
 
 def score(message):
     text: str = message.get('text', '')
     (ok, parsed) = parse.score_parse(text)
+    msg: str = ''
     if not ok:
-        msg = """Invalid.
+        msg += """Invalid.
         Must be `/score @A @B [@C @D] score1-score2` or\n
         `/score @A [p1 s1] @B [p2 s2]\
            @C [p3 s3] @D [p4 s4] SCORE_AB , SCORE_CD`"""
     else:
-        msg = "Match recorded."
-        db = _process_data_for_db(parsed, message)
-        players = list(map(lambda x: x[0], db[:4]))
-        msg += f" Players identified are: {players}"
+        players, note = _process_data_for_db(parsed, message)
+        if len(players) == 0:
+            msg += note
+        else:
+            msg += f"Match recorded: {players[0]} and {players[1]}"
+            msg += f" v. {players[2]} and {players[3]}.\n"
+            if len(note) > 0:
+                msg += "-------------------------\n"
+                msg += note
 
     return msg
 
@@ -122,16 +123,49 @@ def _process_data_for_db(parsed, message):
 
     player_1, player_2, player_3, player_4 = list(map(lambda x: x[0],
                                                       players))
-    mugs = list(map(lambda x: 0 if len(x) == 1 else x[1], players))
+    points = list(map(lambda x: 0 if len(x) == 1 else x[1], players))
     sinks = list(map(lambda x: 0 if len(x) == 1 else x[2], players))
+
+    # Error checking.
+    if max(score_12, score_34) < 7:
+        return [], "Games to less than 7 are for the weak. Disregarded."
+
+    if abs(score_12 - score_34) < 2:
+        return [], "It's win by 2, numbnut."
+
+    if (sum(points[:2]) != 0):
+        if (sum(points[:2]) != score_12):
+            return [], ("Your individual points don't add up to your total."
+                        " *cough* First team. *cough*")
+
+    if (sum(points[2:]) != 0):
+        if (sum(points[2:]) != score_34):
+            print(sum(points[2:]))
+            print(score_34)
+            return [], ("Your individual points don't add up to your total."
+                        " *cough* Second team. *cough*")
+
+    if sum(sinks) > (score_12 + score_34):
+        return [], "More sinks than total points? Nice."
+
+    for player in range(4):
+        if points[player] < sinks[player]:
+            return [], (f"I don't know how {players[player][0]} sunk more "
+                        "times than scored, but I'm impressed.")
+
     ok = add_to_db(player_1, player_2, player_3, player_4,
-                   score_12, score_34, mugs, sinks, timestamp)
+                   score_12, score_34, points, sinks, timestamp)
+
     if ok:
         print("YAAAAY")
     else:
         print("NOOOO :(")
 
-    return parsed
+    # Nakie time.
+    if abs(score_12 - score_34) > 4:
+        return ([player_1, player_2, player_3, player_4],
+                "I smell a naked lap coming.")
+    return [player_1, player_2, player_3, player_4], ''
 
 
 def add_to_db(player, partner, opponent_1, opponent_2,

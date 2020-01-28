@@ -27,8 +27,11 @@ def score_parse(raw_string):
     mention = Suppress('@') +\
         OneOrMore(Word(alphanums)).setParseAction(' '.join)
     points_sinks = Optional(Suppress(Word('[(')) +
-                            score + score_delims + Optional(score) +
-                            Suppress(Word('])'))).setParseAction(cmn.convertToInteger)
+                            Optional(score, default=0) +
+                            score_delims +
+                            Optional(score, default=0) +
+                            Suppress(Word('])'))
+                            ).setParseAction(cmn.convertToInteger)
     total_score = score + score_delims + score
     mentions = OneOrMore(Group(mention + points_sinks))
 
