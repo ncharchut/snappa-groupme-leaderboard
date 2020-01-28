@@ -35,6 +35,9 @@ def webhook():
     sender: str = message.get('sender_id', None)
     text: str = message.get('text', None)
 
+    if sender_is_bot(message):
+        return 'ok', 200
+
     msg: str = ''
     if text.startswith("/score"):
         if sender not in admin:
@@ -44,6 +47,21 @@ def webhook():
     elif (text.startswith("/leaderboard") or
           text.startswith("/lb")):
         msg = generate_leaderboard()
+    elif (text.startswith("/help")):
+        msg = ("Yo, yo! It's ScoreBot. Here's the lowdown.\n\n"
+               "To send a score, you have to be an admin. "
+               "Check this chat's topic to see who they are.\n\n"
+               "To score a match: \n"
+               "\t `/score @A @B [@C @D] score1-score2` or\n"
+               "`/score @A [p1 s1] @B [p2 s2]`"
+               " @C [p3 s3] @D [p4 s4], SCORE_AB - SCORE_CD`\n\n"
+               "Note a couple things here. One, if you log player points"
+               " (optional), you must do it for both people on the team."
+               "  You must also include the brackets.\n\n"
+               "To see the leaderboard (currently meaningless):\n"
+               "\t `/leaderboard` or `/lb`\n\n"
+               "Games must be to 7, drinking thirds, no questions. "
+               "That's all from me, let's toss some dye.")
     elif "scorebot" in text.lower():
         blob = TextBlob(text)
         polarity, subjectivity = blob.sentiment
@@ -67,6 +85,7 @@ def webhook():
 
     print(msg)
     return "ok", 200
+
 
 def get_emotional_response(level):
     file = f"resources/responses/{level}.csv"
@@ -365,5 +384,5 @@ class Rank(db.Model):
 
 
 if __name__ == "__main__":
-    app.debug = True
+    app.debug = False
     app.run(host='0.0.0.0')
