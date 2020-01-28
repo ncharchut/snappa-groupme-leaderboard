@@ -6,12 +6,13 @@ import parse
 import random
 import requests
 import sys
+import groupme_message_type as gm
+
 
 from copy import copy
 from flask import Flask, request
 from flask_heroku import Heroku
 from flask_sqlalchemy import SQLAlchemy
-from groupme_message_type import ERROR_STRING, HELP_STRING, MessageType
 from textblob import TextBlob
 from typing import Any, Dict, List, Tuple
 from urllib.parse import urlencode
@@ -31,16 +32,18 @@ Score = models.create_score_data_object(db)
 Rank = models.create_rank_data_object(db)
 init_rank = False
 
+Response = Tuple[str, int]
+
 
 @app.route('/', methods=['POST'])
-def webhook():
+def webhook() -> Response:
     """
     Receives the JSON object representing the GroupMe message, and
     sends a response, if necessary.
 
     Returns:
-        status [str]: 'ok' or 'not ok'.
-        code   [int]: Standard error code.
+        str: 'ok' or 'not ok'.
+        int: Standard error code.
     """
     message: Dict[str, Any] = request.get_json()
     admin: List[str] = os.getenv('ADMIN').split(':')
@@ -57,44 +60,36 @@ def webhook():
         print("Initializing rankings..")
         __init_rankings()
 
-    message_type: MessageType = MessageType.NOTHING
-    if text.startswith("/score"):
-        if sender in admin:
-            message_type = MessageType.ADMIN_SCORE
-        else:
-            message_type = MessageType.NON_ADMIN_SCORE
-    elif (text.startswith("/leaderboard") or
-          text.startswith("/lb")):
-        message_type = MessageType.LEADERBOARD
-    elif (text.startswith("/check")) and sender in admin:
-        message_type = MessageType.ADMIN_VERIFY
-    elif (text.startswith("/help")):
-        message_type = MessageType.HELP
-    elif "scorebot" in text.lower():
-        message_type = MessageType.TAUNTING
-
-    return process_message(message, message_type)
-
-
-def process_message(message: Dict, message_type: MessageType)\
-        -> Tuple[str, int]:
     response: str = ''
-    if message_type == MessageType.ADMIN_SCORE:
-        response = score(message)
-    elif message_type == MessageType.LEADERBOARD:
+    if text.startswith(gm.RECORD_SCORE):
+        response = "Waiting for approval." if sender not in admin\
+                    else score(message)
+    elif (text.startswith(gm.LEADERBOARD) or
+          text.startswith(gm.LB)):
         response = generate_leaderboard()
-    elif message_type == MessageType.ADMIN_VERIFY:
+    elif (text.startswith(gm.ADMIN_VERIFY)) and sender in admin:
         messages = get_messages_before_id(message.get('id'))
         response = filter_messages_for_scores(messages)
-    elif message_type == MessageType.HELP:
-        response = HELP_STRING
-    elif message_type == MessageType.TAUNTING:
+    elif (text.startswith(gm.HELP)):
+        response = gm.HELP_STRING
+    elif gm.BOT_NAME in text.lower():
         response = taunt(message.get('text', ''))
 
     return send_response(response)
 
 
-def send_response(response: Any):
+def send_response(response: Any) -> Response:
+    """
+    Sends the bot's response to the GroupMe API.
+
+    Args:
+        response [str]: The bot's determined response.
+
+    Returns:
+        str: 'ok' or 'not ok'.
+        int: Standard error code.
+    """
+
     if not app.debug:
         if isinstance(response, list):
             for msg in response:
@@ -105,18 +100,38 @@ def send_response(response: Any):
     return 'ok', 200
 
 
-def taunt(text: str):
+def taunt(text: str) -> str:
+    """
+    Generates a taunt or corresponding response to messages
+    that are directed at the bot.
+
+    Args:
+        text [str]: The text of the incoming GroupMe message.
+
+    Returns:
+        str: An emotional response from its phrase repository.
+    """
     blob = TextBlob(text)
     polarity, subjectivity = blob.sentiment
-    sentiment = 'neutral'
+    sentiment = gm.Sentiment.NEUTRAL
     if polarity < -0.3:
-        sentiment = 'bad'
+        sentiment = gm.Sentiment.BAD
     elif polarity > 0.3:
-        sentiment = 'good'
+        sentiment = gm.Sentiment.GOOD
     return get_emotional_response(sentiment)
 
 
-def get_emotional_response(level):
+def get_emotional_response(sentiment: gm.Sentiment) -> str:
+    """
+    Generates an emotional response of the given sentiment.
+
+    Args:
+        sentiment [Sentiment]: Enum describing message sentiment.
+
+    Returns:
+        str: Chosen respnose to the identified sentiment.
+    """
+    level: str = sentiment.name.lower()
     file = f"resources/responses/{level}.csv"
     response = ''
     with open(file, 'r') as responses:
@@ -126,12 +141,21 @@ def get_emotional_response(level):
     return response
 
 
-def score(message):
+def score(message: Dict) -> str:
+    """
+    Parses a GroupMe message object to verify and log the given match.
+
+    Args:
+        message [Dict]: Input GroupMe message JSON.
+
+    Returns:
+        str: The bot's response to the input.
+    """
     text: str = message.get('text', '')
     (ok, parsed) = parse.score_parse(text)
     msg: str = ''
     if not ok:
-        msg += ERROR_STRING
+        msg += gm.ERROR_STRING
     else:
         db_data, note = _process_data_for_db(parsed, message)
         players = db_data[:4]
@@ -139,8 +163,7 @@ def score(message):
             msg += note
         else:
             add_to_db(*db_data)
-            msg += f"Match recorded:\n {players[0]} and {players[1]}"
-            msg += f" v. {players[2]} and {players[3]}.\n"
+            msg += match_string(db_data)
             if len(note) > 0:
                 msg += "-------------------------\n"
                 msg += note
@@ -148,21 +171,59 @@ def score(message):
     return msg
 
 
-def generate_leaderboard():
-    ranks = Rank.query.all()
-    ranks = sorted(Rank.query.all(), key=lambda x: x.rank)[:10]
-    msg = 'LEADERBOARD\n'.rjust(10)
+def match_string(db_data) -> str:
+    """ Generates the string describing the given match. """
+    player_1, player_2, player_3, player_4,\
+        score_12, score_34, _, _, _ = db_data
+    return (f"Match recorded:\n"
+            f"{player_name(player_1)}, {player_name(player_2)}"
+            f"{'(W)' if score_12 > score_34 else '(L)'}"
+            f" v. {player_name(player_3)}"
+            f", {player_name(player_4)}"
+            f"{'(W)' if score_34 > score_12 else '(L)'}"
+            f" | {score_12} - {score_34}\n")
+
+
+def player_name(player) -> str:
+    """ Given a player's name, returns their first name and last initial. """
+    names = player.split(' ')
+    first: str = names[0]
+    last_initial: str = names[-1][0] + '.'
+    return ' '.join([first, last_initial])
+
+
+def generate_leaderboard() -> str:
+    """
+    Generates and returns the leaderboard string by querying the database.
+    """
+    ranks: List[Rank] = Rank.query.order_by(Rank.name).limit(10)
+    msg: str = 'LEADERBOARD\n'.rjust(10)
     msg += '-------------------------\n'
 
     for player in ranks:
-        name = player.name
-        rank = player.rank
+        name: str = player.name
+        rank: int = player.rank
         msg += f"{rank}   -   {name}\n"
 
     return msg
 
 
-def _process_data_for_db(parsed, message):
+def _process_data_for_db(parsed: List[Any], message: Dict) -> Tuple[List, str]:
+    """
+    Given a parsed message string, further processes the data
+    to be added to the database. Also, conduct some post-processing
+    error-checking.
+
+    Args:
+        parsed [List[Any]]: The parsed input string, per `parse.score_parse`.
+        message [Dict]: Input GroupMe message JSON.
+
+    Returns:
+        Tuple[List, str]: Processed data ready for entry to database, alone
+                          with additional string response from the bot,
+                          if necessary.
+    """
+    # Generate converting dictionary to replace sender names with real names.
     ids_var = os.getenv('IDS').split(':')
     convert_dict = dict()
     for id_name in ids_var:
@@ -222,19 +283,21 @@ def _process_data_for_db(parsed, message):
                     "times than scored, but I'm impressed.")
 
     if len(note) == 0:
-        db_data = (player_1, player_2, player_3, player_4, score_12,
-                   score_34, points, sinks, timestamp)
-    if abs(score_12 - score_34) > 4:
-        note = "I smell a naked lap coming."
+        db_data = [player_1, player_2, player_3, player_4, score_12,
+                   score_34, points, sinks, timestamp]
+        if abs(score_12 - score_34) > 4:
+            note = "I smell a naked lap coming."
 
     return db_data, note
 
 
-def add_to_db(player, partner, opponent_1, opponent_2,
-              score, opp_score, mugs, sinks, timestamp):
-    indata = Score(player, partner, opponent_1, opponent_2,
-                   score, opp_score, mugs, sinks, timestamp)
-    data = copy(indata.__dict__)
+def add_to_db(player_1: str, player_2: str, player_3: str, player_4: str,
+              score_12: int, score_34: int, points: int, sinks: int,
+              timestamp: int) -> bool:
+    """ Given the necessary data entries, logs game score to database. """
+    indata: Score = Score(player_1, player_2, player_3, player_4,
+                          score_12, score_34, points, sinks, timestamp)
+    data: Dict = copy(indata.__dict__)
     del data["_sa_instance_state"]
     try:
         if app.debug:
@@ -249,9 +312,11 @@ def add_to_db(player, partner, opponent_1, opponent_2,
     return True
 
 
-def __init_rankings():
-    """ Uses a csv file of GroupMe IDs to real names to initialize
-    the database. """
+def __init_rankings() -> bool:
+    """
+    Uses a csv file of GroupMe IDs to real names to initialize
+    the database.
+    """
     raw_ids_names = os.environ.get('IDS', '').split(':')
     for item in raw_ids_names:
         groupme_id, name = item.split('%')
@@ -271,8 +336,8 @@ def __init_rankings():
             return False
 
 
-# Send a message in the groupchat
-def reply(msg):
+def reply(msg: str) -> None:
+    """ Sends the bot's message via the GroupMe API. """
     url = 'https://api.groupme.com/v3/bots/post'
     data = {'bot_id': os.getenv('BOT_ID'),
             'text': msg}
@@ -286,7 +351,11 @@ def reply(msg):
     print(response)
 
 
-def get_messages_before_id(before_id):
+def get_messages_before_id(before_id: str) -> Dict:
+    """
+    Retrieves the 10 previous messages to the message
+    with id equal to `before_id`.
+    """
     group_id = os.environ.get('GROUPME_GROUP_ID')
     token = os.environ.get('ACCESS_TOKEN')
     url = f'https://api.groupme.com/v3/groups/{group_id}/messages'
@@ -298,7 +367,11 @@ def get_messages_before_id(before_id):
     return msg_rqst.json()['response']
 
 
-def filter_messages_for_scores(messages):
+def filter_messages_for_scores(messages: Dict) -> List[str]:
+    """
+    Filters a GroupMe JSON object for all attached messages, computes
+    score strings and adds them to the database.
+    """
     admin: List[str] = os.getenv('ADMIN').split(':')
     msgs = []
     last_updated_game = Score.query.order_by(Score.timestamp.desc()).first()
@@ -315,39 +388,6 @@ def filter_messages_for_scores(messages):
                     msgs.append(score(message))
 
     return msgs
-
-
-# Send a message with an image attached in the groupchat
-def reply_with_image(msg, imgURL):
-    url = 'https://api.groupme.com/v3/bots/post'
-    urlOnGroupMeService = upload_image_to_groupme(imgURL)
-    data = {'bot_id':      os.environ.get('BOT_ID', None),
-            'text':        msg,
-            'picture_url': urlOnGroupMeService}
-    request = Request(url, urlencode(data).encode())
-    response = urlopen(request).read().decode()
-    print(response)
-
-
-# Uploads image to GroupMe's services and returns the new URL
-def upload_image_to_groupme(imgURL):
-    imgRequest = requests.get(imgURL, stream=True)
-    filename = 'temp.png'
-    # postImage = None
-    if imgRequest.status_code == 200:
-        # Save Image
-        with open(filename, 'wb') as image:
-            for chunk in imgRequest:
-                image.write(chunk)
-    # Send Image
-    # headers = {'content-type': 'application/json'}
-    url = 'https://image.groupme.com/pictures'
-    files = {'file': open(filename, 'rb')}
-    payload = {'access_token': 'eo7JS8SGD49rKodcvUHPyFRnSWH1IVeZyOqUMrxU'}
-    r = requests.post(url, files=files, params=payload)
-    imageurl = r.json()['payload']['url']
-    os.remove(filename)
-    return imageurl
 
 
 # Checks whether the message sender is a bot

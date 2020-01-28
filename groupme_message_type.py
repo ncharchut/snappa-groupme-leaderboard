@@ -1,32 +1,41 @@
 from enum import Enum
 
 
-class MessageType(Enum):
-    ADMIN_SCORE = 1
-    NON_ADMIN_SCORE = 2
-    LEADERBOARD = 3
-    ADMIN_VERIFY = 4
-    TAUNTING = 5
-    NOTHING = 6
-    HELP = 7
+class Sentiment(Enum):
+    BAD = 1
+    NEUTRAL = 2
+    GOOD = 3
 
 
 ERROR_STRING = ("Invalid. "
-                "Must be `/score @A @B [@C @D] score1-score2` or\n"
-                "`/score @A [p1 s1] @B [p2 s2]"
-                "@C [p3 s3] @D [p4 s4] SCORE_AB , SCORE_CD")
+                "Must be `/score @A @B @C @D, SCORE_AB - SCORE_CD` or\n"
+                "`/score @A (p1 s1) @B (p2 s2)"
+                " @C (p3 s3) @D (p4 s4), SCORE_AB - SCORE_CD")
 
-HELP_STRING = ("Yo, yo! It's ScoreBot. Here's the lowdown.\n\n"
-               "To send a score, you have to be an admin. "
-               "Check this chat's topic to see who they are.\n\n"
+HELP_STRING = ("Sup, bitches. It's ScoreBot. Here's the lowdown.\n\n"
+               "Anyone can send a score, but an admin has to"
+               " like their message and send `/check` to the GroupMe"
+               " before I can officially record the match. Obviously,"
+               " admins do not need my approval."
+               " Check this chat's topic to see who they are!\n\n"
                "To score a match: \n"
-               "`/score @A @B [@C @D] score1-score2` or\n"
-               "\t`/score @A [p1 s1] @B [p2 s2]`"
-               " @C [p3 s3] @D [p4 s4], SCORE_AB - SCORE_CD`\n\n"
+               "`/score @A @B @C @D, SCORE_AB - SCORE_CD` or\n"
+               "\t`/score @A (p1 s1) @B (p2 s2)`"
+               " @C (p3 s3) @D (p4 s4), SCORE_AB - SCORE_CD`\n\n"
                "Note a couple things here. One, if you log player points"
-               " (optional), you must do it for both people on the team."
-               "  You must also include the brackets.\n\n"
+               " (the `p`s above; optional), you must do it for both"
+               " people on the team. The same doesn't apply for sinks"
+               " (the `s`s; also optional), since I'll assume you won't sink"
+               " shit. You must also include the brackets/parens.\n\n"
                "To see the leaderboard (currently meaningless):\n"
                "`/leaderboard` or `/lb`\n\n"
-               "Games must be to 7, drinking thirds, no questions. "
+               "Games must be to 7, win by 2, drinking thirds, no questions. "
                "That's all from me, let's toss some dye.")
+
+# Constants for the names of the various commands.
+ADMIN_VERIFY = "/check"
+RECORD_SCORE = "/score"
+LEADERBOARD = "/leaderboard"
+BOT_NAME = "scorebot"
+HELP = "/help"
+LB = "/lb"
