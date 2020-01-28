@@ -43,7 +43,6 @@ def webhook() -> Response:
 
     Returns:
         str: 'ok' or 'not ok'.
-        int: Standard error code.
     """
     message: Dict[str, Any] = request.get_json()
     admin: List[str] = os.getenv('ADMIN').split(':')
@@ -63,18 +62,21 @@ def webhook() -> Response:
     response: str = ''
     if text.startswith(gm.RECORD_SCORE):
         response = "Waiting for approval." if sender not in admin\
-                    else score(message)
+                    else score(message, check=True)
     elif (text.startswith(gm.LEADERBOARD) or
           text.startswith(gm.LB)):
         response = generate_leaderboard()
     elif (text.startswith(gm.ADMIN_VERIFY)) and sender in admin:
         messages = get_messages_before_id(message.get('id'))
         response = filter_messages_for_scores(messages)
+    elif (text.startswith(gm.HELP_V)):
+        response = gm.HELP_STRING_V
     elif (text.startswith(gm.HELP)):
         response = gm.HELP_STRING
     elif gm.BOT_NAME in text.lower():
         response = taunt(message.get('text', ''))
 
+    print(message)
     return send_response(response)
 
 
@@ -141,12 +143,14 @@ def get_emotional_response(sentiment: gm.Sentiment) -> str:
     return response
 
 
-def score(message: Dict) -> str:
+def score(message: Dict, check: bool = False) -> str:
     """
     Parses a GroupMe message object to verify and log the given match.
 
     Args:
         message [Dict]: Input GroupMe message JSON.
+        check   [bool]: Flag indicating whether an admin is verifying
+                        or sending the score directly.
 
     Returns:
         str: The bot's response to the input.
@@ -155,6 +159,9 @@ def score(message: Dict) -> str:
     (ok, parsed) = parse.score_parse(text)
     msg: str = ''
     if not ok:
+        if check:
+            msg += 'Bad command: \n'
+            msg += text
         msg += gm.ERROR_STRING
     else:
         db_data, note = _process_data_for_db(parsed, message)
@@ -175,13 +182,12 @@ def match_string(db_data) -> str:
     """ Generates the string describing the given match. """
     player_1, player_2, player_3, player_4,\
         score_12, score_34, _, _, _ = db_data
-    return (f"Match recorded:\n"
-            f"{player_name(player_1)}, {player_name(player_2)}"
-            f"{'(W)' if score_12 > score_34 else '(L)'}"
-            f" v. {player_name(player_3)}"
-            f", {player_name(player_4)}"
-            f"{'(W)' if score_34 > score_12 else '(L)'}"
-            f" | {score_12} - {score_34}\n")
+    return (f"Match recorded, score of {score_12} - {score_34}.\n"
+            "-------------------------\n"
+            f"{'W: ' if score_12 > score_34 else 'L: '}"
+            f"{player_name(player_1)}, {player_name(player_2)}\n"
+            f"{'W: ' if score_34 > score_12 else 'L: '}"
+            f"{player_name(player_3)}, {player_name(player_4)}\n")
 
 
 def player_name(player) -> str:
@@ -196,7 +202,7 @@ def generate_leaderboard() -> str:
     """
     Generates and returns the leaderboard string by querying the database.
     """
-    ranks: List[Rank] = Rank.query.order_by(Rank.name).limit(10)
+    ranks: List[Rank] = Rank.query.order_by(Rank.name).limit(15)
     msg: str = 'LEADERBOARD\n'.rjust(10)
     msg += '-------------------------\n'
 
@@ -361,7 +367,7 @@ def get_messages_before_id(before_id: str) -> Dict:
     url = f'https://api.groupme.com/v3/groups/{group_id}/messages'
     params = {'before_id': str(before_id),
               'token': token,
-              'limit': 10}
+              'limit': 20}
 
     msg_rqst = requests.get(url, params=params)
     return msg_rqst.json()['response']
@@ -373,9 +379,9 @@ def filter_messages_for_scores(messages: Dict) -> List[str]:
     score strings and adds them to the database.
     """
     admin: List[str] = os.getenv('ADMIN').split(':')
-    msgs = []
+    msgs: List[str] = []
     last_updated_game = Score.query.order_by(Score.timestamp.desc()).first()
-    last_timestamp = last_updated_game.timestamp
+    last_timestamp: int = last_updated_game.timestamp
 
     for message in messages.get('messages'):
         text = message.get('text')
@@ -385,7 +391,10 @@ def filter_messages_for_scores(messages: Dict) -> List[str]:
 
             for favorite in favorites:
                 if (favorite in admin) and (timestamp > last_timestamp):
-                    msgs.append(score(message))
+                    msgs.append(score(message, check=True))
+
+    if len(msgs) == 0:
+        msgs.append("Chill homie, we're already updated.")
 
     return msgs
 
