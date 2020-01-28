@@ -35,18 +35,25 @@ def webhook():
     sender: str = message.get('sender_id', None)
     text: str = message.get('text', None)
 
-    if sender_is_bot(message):
-        return 'ok', 200
+    # if sender_is_bot(message):
+    #     return 'ok', 200
 
     msg: str = ''
     if text.startswith("/score"):
-        if sender not in admin:
-            msg = "Lesser beings aren't granted such powers."
-        else:
+        if sender in admin:
             msg = score(message)
     elif (text.startswith("/leaderboard") or
           text.startswith("/lb")):
         msg = generate_leaderboard()
+    elif (text.startswith("/check")):
+        if sender in admin:
+            messages = get_messages_before_id(message.get('id'))
+            msgs = filter_messages_for_scores(messages)
+            if not app.debug:
+                for msg in msgs:
+                    reply(msg)
+                    print(msg)
+                    return "ok", 200
     elif (text.startswith("/help")):
         msg = ("Yo, yo! It's ScoreBot. Here's the lowdown.\n\n"
                "To send a score, you have to be an admin. "
@@ -146,6 +153,7 @@ def _process_data_for_db(parsed, message):
     me = message.get('sender_id', None)
     mentions = message.get('attachments', [{}])[0].get('user_ids', [])
     timestamp = message.get('created_at', None)
+    game_id = message.get('id', None)
 
     people = list(map(lambda x: x[0], parsed_mentions))
     j: int = 0
@@ -194,7 +202,7 @@ def _process_data_for_db(parsed, message):
                         "times than scored, but I'm impressed.")
 
     ok = add_to_db(player_1, player_2, player_3, player_4,
-                   score_12, score_34, points, sinks, timestamp)
+                   score_12, score_34, points, sinks, timestamp, game_id)
 
     if ok:
         print("YAAAAY")
@@ -209,9 +217,9 @@ def _process_data_for_db(parsed, message):
 
 
 def add_to_db(player, partner, opponent_1, opponent_2,
-              score, opp_score, mugs, sinks, timestamp):
+              score, opp_score, mugs, sinks, timestamp, game_id):
     indata = Score(player, partner, opponent_1, opponent_2,
-                   score, opp_score, mugs, sinks, timestamp)
+                   score, opp_score, mugs, sinks, timestamp, game_id)
     data = copy(indata.__dict__)
     del data["_sa_instance_state"]
     try:
@@ -259,11 +267,40 @@ def reply(msg):
               `heroku config:set BOT_ID=ID`.")
         return
 
-    print(data)
-
     request = Request(url, urlencode(data).encode())
     response = urlopen(request).read().decode()
     print(response)
+
+
+def get_messages_before_id(before_id):
+    group_id = os.environ.get('GROUPME_GROUP_ID')
+    token = os.environ.get('ACCESS_TOKEN')
+    url = f'https://api.groupme.com/v3/groups/{group_id}/messages'
+    params = {'before_id': str(before_id),
+              'token': token,
+              'limit': 10}
+
+    msg_rqst = requests.get(url, params=params)
+    return msg_rqst.json()['response']
+
+
+def filter_messages_for_scores(messages):
+    admin: List[str] = os.getenv('ADMIN').split(':')
+    msgs = []
+    last_updated_game = Score.query.order_by(Score.timestamp.desc()).first()
+    last_timestamp = last_updated_game.timestamp
+
+    for message in messages.get('messages'):
+        text = message.get('text')
+        if text.startswith("/score"):
+            timestamp = message.get("created_at")
+            favorites = message.get('favorited_by')
+
+            for favorite in favorites:
+                if (favorite in admin) and (timestamp > last_timestamp):
+                    msgs.append(score(message))
+
+    return msgs
 
 
 # Send a message with an image attached in the groupchat
@@ -338,7 +375,7 @@ class Score(db.Model):
     timestamp = db.Column(db.Integer)
 
     def __init__(self, player_1, player_2, player_3, player_4,
-                 score_12, score_34, points, sinks, timestamp):
+                 score_12, score_34, points, sinks, timestamp, game_id):
         self.player_1 = player_1
         self.player_2 = player_2
         self.player_3 = player_3
@@ -348,6 +385,7 @@ class Score(db.Model):
         self.score_12 = score_12
         self.score_34 = score_34
         self.timestamp = timestamp
+        self.game_id = game_id
 
     def __repr__(self):
         return f"<id {self.id}>"
