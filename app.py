@@ -18,7 +18,7 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 heroku = Heroku(app)
 db = SQLAlchemy(app)
-init_rank = True
+init_rank = False
 
 
 @app.route('/', methods=['POST'])
