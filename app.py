@@ -1,7 +1,6 @@
 import json
 import os
 import parse
-import psycopg2
 import requests
 import sys
 
@@ -15,6 +14,12 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 app = Flask(__name__)
+# app.debug = False
+
+if app.debug:
+    print("HERE")
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 heroku = Heroku(app)
 db = SQLAlchemy(app)
@@ -29,40 +34,63 @@ def webhook():
     sender: str = message.get('sender_id', None)
     text: str = message.get('text', None)
 
-    if not text.startswith("/score"):
+    msg: str = ''
+    if text.startswith("/score"):
+        if sender not in admin:
+            msg = "Lesser beings aren't granted such powers."
+        else:
+            msg = score(message)
+    elif (text.startswith("/leaderboard") or
+          text.startswith("/lb")):
+        msg = generate_leaderboard()
+    else:
         print("Don't care.")
         return "ok", 200
 
     # Initialize the rankings DB. Should only happen once.
     if init_rank:
+        print("Initializing rankings..")
         __init_rankings()
 
-    msg: str
-    parsed: List[Any] = []
-    if sender not in admin:
-        msg = "Lesser beings aren't granted such powers."
-        print(msg)
-    else:
-        (ok, parsed) = parse.score_parse(text)
-        if not ok:
-            msg = """Invalid.
-            Must be `/score @A @B [@C @D] score1-score2` or\n
-            `/score @A [p1 s1] @B [p2 s2]\
-               @C [p3 s3] @D [p4 s4] SCORE_AB , SCORE_CD`"""
-        else:
-            msg = "Match recorded."
-            print(parsed)
-            db = _process_data_for_db(parsed, message)
-            players = list(map(lambda x: x[0], db[:4]))
-            msg += f" Players identified are: {players}"
-
     if not app.debug:
+        print(msg)
         reply(msg)
     else:
         print(msg)
-        print(parsed)
+
     print(message)
     return "ok", 200
+
+
+def score(message):
+    text: str = message.get('text', '')
+    (ok, parsed) = parse.score_parse(text)
+    if not ok:
+        msg = """Invalid.
+        Must be `/score @A @B [@C @D] score1-score2` or\n
+        `/score @A [p1 s1] @B [p2 s2]\
+           @C [p3 s3] @D [p4 s4] SCORE_AB , SCORE_CD`"""
+    else:
+        msg = "Match recorded."
+        db = _process_data_for_db(parsed, message)
+        players = list(map(lambda x: x[0], db[:4]))
+        msg += f" Players identified are: {players}"
+
+    return msg
+
+
+def generate_leaderboard():
+    ranks = Rank.query.all()
+    ranks = sorted(Rank.query.all(), key=lambda x: x.rank)[:10]
+    msg = 'LEADERBOARD\n'.rjust(10)
+    msg += '-------------------------\n'
+
+    for player in ranks:
+        name = player.name
+        rank = player.rank
+        msg += f"{rank}   -   {name}\n"
+
+    return msg
 
 
 def _process_data_for_db(parsed, message):
@@ -99,21 +127,11 @@ def _process_data_for_db(parsed, message):
     ok = add_to_db(player_1, player_2, player_3, player_4,
                    score_12, score_34, mugs, sinks, timestamp)
     if ok:
-        generate_leaderboard()
+        print("YAAAAY")
     else:
         print("NOOOO :(")
 
     return parsed
-
-
-def generate_leaderboard():
-    DATABASE_URL = os.environ['DATABASE_URL']
-    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM "snappa-scores"')
-    rows = cursor.fetchall()
-    for r in rows:
-        print(r)
 
 
 def add_to_db(player, partner, opponent_1, opponent_2,
@@ -141,7 +159,6 @@ def __init_rankings():
     raw_ids_names = os.environ.get('IDS', '').split(':')
     for item in raw_ids_names:
         groupme_id, name = item.split('%')
-        print(f"id: {groupme_id}, name: {name}")
         # Initial rankings are all 1 for now.
         indata = Rank(groupme_id, name, 1)
         data = copy(indata.__dict__)
@@ -167,6 +184,8 @@ def reply(msg):
         print("BOT_ID environment variable not set. Please configure with\
               `heroku config:set BOT_ID=ID`.")
         return
+
+    print(data)
 
     request = Request(url, urlencode(data).encode())
     response = urlopen(request).read().decode()
