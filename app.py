@@ -1,4 +1,3 @@
-import csv
 import json
 import os
 import parse
@@ -21,8 +20,6 @@ heroku = Heroku(app)
 db = SQLAlchemy(app)
 init_rank = True
 
-# from models import Score, Rank  # NOQA
-
 
 @app.route('/', methods=['POST'])
 def webhook():
@@ -38,7 +35,7 @@ def webhook():
 
     # Initialize the rankings DB. Should only happen once.
     if init_rank:
-        __init_rankings('resources/groupme_ids_to_names.csv')
+        __init_rankings()
 
     msg: str
     parsed: List[Any] = []
@@ -72,7 +69,7 @@ def _process_data_for_db(parsed, message):
     ids_var = os.getenv('IDS').split(':')
     convert_dict = dict()
     for id_name in ids_var:
-        id, name = id_name.split('-')
+        id, name = id_name.split('%')
         convert_dict[id] = name
 
     # Convert nicknames to actual names.
@@ -138,27 +135,27 @@ def add_to_db(player, partner, opponent_1, opponent_2,
     return True
 
 
-def __init_rankings(file: str):
+def __init_rankings():
     """ Uses a csv file of GroupMe IDs to real names to initialize
     the database. """
-    with open(file, 'r') as groupme_ids:
-        reader = csv.reader(groupme_ids)
-        for line in reader:
-            groupme_id, name = line
-            # Initial rankings are all 1 for now.
-            indata = Rank(groupme_id, name, 1)
-            data = copy(indata.__dict__)
-            del data["_sa_instance_state"]
-            try:
-                if app.debug:
-                    return True
-                db.session.add(indata)
-                db.session.commit()
-            except Exception as e:
-                print(f"FAILED entry: {json.dumps(data)}\n")
-                print(e)
-                sys.stdout.flush()
-                return False
+    raw_ids_names = os.environ.get('IDS', '').split(':')
+    for item in raw_ids_names:
+        groupme_id, name = item.split('%')
+        print(f"id: {groupme_id}, name: {name}")
+        # Initial rankings are all 1 for now.
+        indata = Rank(groupme_id, name, 1)
+        data = copy(indata.__dict__)
+        del data["_sa_instance_state"]
+        if app.debug:
+            continue
+        try:
+            db.session.add(indata)
+            db.session.commit()
+        except Exception as e:
+            print(f"FAILED entry: {json.dumps(data)}\n")
+            print(e)
+            sys.stdout.flush()
+            return False
 
 
 # Send a message in the groupchat
