@@ -271,6 +271,9 @@ def _process_data_for_db(parsed: List[Any], message: Dict) -> Tuple[List, str]:
 
     player_1, player_2, player_3, player_4 = list(map(lambda x: x[0],
                                                       players))
+    # ranks: List[Stats] = Stats.query.select(Stats.name, Stats.elo).order_by(Stats.elo).limit(15)
+
+
     points = list(map(lambda x: 0 if len(x) == 1 else x[1], players))
     sinks = list(map(lambda x: 0 if len(x) == 1 else x[2], players))
     note: str = ''
@@ -418,5 +421,5 @@ def sender_is_bot(message):
 
 
 if __name__ == "__main__":
-    app.debug = True
+    app.debug = False
     app.run(host='0.0.0.0')
