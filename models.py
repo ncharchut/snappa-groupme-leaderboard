@@ -37,8 +37,8 @@ def create_score_data_object(db):
         elo_4 = db.Column(db.Integer, default=1000)
 
         def __init__(self, player_1, player_2, player_3, player_4,
-                     score_12, score_34, points, sinks,
-                     elo_1, elo_2, elo_3, elo_4, timestamp):
+                     score_12, score_34, points, sinks, timestamp,
+                     elo_1, elo_2, elo_3, elo_4):
             self.player_1 = player_1
             self.player_2 = player_2
             self.player_3 = player_3
@@ -86,5 +86,7 @@ def create_stats_data_object(db):
             self.name = name
 
         def __repr__(self):
-            return f"<id {self.name}>"
+            return (f"{self.name} | {self.elo} | {self.wins} | "
+                    f"{self.losses} | {self.games} | {self.points} | "
+                    f"{self.sinks}")
     return Stats

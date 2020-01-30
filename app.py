@@ -76,6 +76,8 @@ def webhook() -> Response:
     elif (text.startswith(gm.ADD_USER)):
         response = "Only an admin can add users."\
                 if sender not in admin else add_user(message)
+    elif (text == "/replay") and sender in admin:
+        replay_records()
     elif gm.BOT_NAME in text.lower():
         response = taunt(message.get('text', ''))
 
@@ -194,7 +196,7 @@ def score(message: Dict, check: bool = False) -> str:
 def match_string(db_data) -> str:
     """ Generates the string describing the given match. """
     player_1, player_2, player_3, player_4,\
-        score_12, score_34, _, _, _ = db_data
+        score_12, score_34, _, _, _, elo_1, elo_2, elo_3, elo_4 = db_data
     return (f"Match recorded, score of {score_12} - {score_34}.\n"
             "-------------------------\n"
             f"{'W: ' if score_12 > score_34 else 'L: '}"
@@ -215,14 +217,14 @@ def generate_leaderboard() -> str:
     """
     Generates and returns the leaderboard string by querying the database.
     """
-    ranks: List[Stats] = Stats.query.order_by(Stats.name).limit(15)
+    elos: List[Stats] = Stats.query.order_by(Stats.elo).limit(15)
     msg: str = 'LEADERBOARD\n'.rjust(10)
     msg += '-------------------------\n'
 
-    for player in ranks:
+    for player in elos:
         name: str = player.name
-        rank: int = player.rank
-        msg += f"{rank}   -   {name}\n"
+        elo: int = player.elo
+        msg += f"{elo}   -   {name}\n"
 
     return msg
 
@@ -265,14 +267,19 @@ def _process_data_for_db(parsed: List[Any], message: Dict) -> Tuple[List, str]:
             j += 1
 
     # Get it primed for the database.
-    parsed = list(parsed)
+    parsed = parsed
     players = [list(parsed[i]) for i in range(4)]
     score_12, score_34 = list(parsed[-1])
 
-    player_1, player_2, player_3, player_4 = list(map(lambda x: x[0],
-                                                      players))
-    # ranks: List[Stats] = Stats.query.select(Stats.name, Stats.elo).order_by(Stats.elo).limit(15)
+    player_names = list(map(lambda x: x[0], players))
+    player_1, player_2, player_3, player_4 = player_names
 
+    stats: List[Stats] = Stats.query.filter((Stats.name == player_1) |
+                                            (Stats.name == player_2) |
+                                            (Stats.name == player_3) |
+                                            (Stats.name == player_4)).all()
+
+    elo_1, elo_2, elo_3, elo_4 = calculate_elo(stats, score_12, score_34)
 
     points = list(map(lambda x: 0 if len(x) == 1 else x[1], players))
     sinks = list(map(lambda x: 0 if len(x) == 1 else x[2], players))
@@ -299,27 +306,93 @@ def _process_data_for_db(parsed: List[Any], message: Dict) -> Tuple[List, str]:
     if sum(sinks) > (score_12 + score_34):
         note = "More sinks than total points? Nice."
 
-    for player in settings.NUM_PLAYERS:
+    for player in range(settings.NUM_PLAYERS):
         if points[player] < sinks[player]:
             note = (f"I don't know how {players[player][0]} sunk more "
                     "times than scored, but I'm impressed.")
 
     if len(note) == 0:
         db_data = [player_1, player_2, player_3, player_4, score_12,
-                   score_34, points, sinks, timestamp]
+                   score_34, points, sinks, timestamp,
+                   elo_1, elo_2, elo_3, elo_4]
         if abs(score_12 - score_34) > settings.MERCY_THRESHOLD:
             note = "I smell a naked lap coming."
 
     return db_data, note
 
 
+def calculate_elo(stats: Stats, score_a, score_b):
+    elo_1, elo_2, elo_3, elo_4 = list(map(lambda x: x.elo, stats))
+    team_a_avg = 0.5 * (elo_1 + elo_2)
+    team_b_avg = 0.5 * (elo_3 + elo_4)
+    expected_a = 1 / (1 + 10 ** ((team_b_avg - team_a_avg) / 500))
+    expected_b = 1 / (1 + 10 ** ((team_a_avg - team_b_avg) / 500))
+    score_p_a = score_a / (score_a + score_b)
+    score_p_b = 1 - score_p_a
+
+    elo_delta_a = settings.K * (score_p_a - expected_a)
+    elo_delta_b = settings.K * (score_p_b - expected_b)
+
+    return (elo_1 + elo_delta_a, elo_2 + elo_delta_a,
+            elo_3 + elo_delta_b, elo_4 + elo_delta_b)
+
+
+def replay_records():
+    records = Score.query.order_by(Score.timestamp).all()
+    n_records = len(records)
+    stats = Stats.query.all()
+    stats_dict = {stat.name: stat for stat in stats}
+
+    for j, record in enumerate(records):
+        for i, player in enumerate([record.player_1,
+                                    record.player_2,
+                                    record.player_3,
+                                    record.player_4]):
+            player_stat = stats_dict[player]
+            update_player_stats(player_stat, i, record)
+        # Update future elo, so things work out.
+        if j < (n_records - 1):
+            future_record = records[j + 1]
+            future_record.elo_1 = player_stat.elo_1
+            future_record.elo_2 = player_stat.elo_2
+            future_record.elo_3 = player_stat.elo_3
+            future_record.elo_4 = player_stat.elo_4
+
+    if app.debug:
+        for record in records:
+            print(record)
+            print(stats)
+    else:
+        db.session.commit()
+
+
+def update_player_stats(player, player_number, record):
+    player.games = Stats.games + 1
+    points = [record.points_1, record.points_2,
+              record.points_3, record.points_4]
+    sinks = [record.sinks_1, record.sinks_2,
+             record.sinks_3, record.sinks_4]
+    elos = [record.elo_1, record.elo_2,
+            record.elo_3, record.elo_4]
+    if record.score_12 > record.score_34:
+        if player_number in [1, 2]:
+            player.wins = Stats.wins + 1
+        else:
+            player.losses = Stats.losses + 1
+    player.points = Stats.points + points[player_number]
+    player.sinks = Stats.sinks + sinks[player_number]
+    player.elo = elos[player_number]
+
+
 def add_to_db(db: Any,
               player_1: str, player_2: str, player_3: str, player_4: str,
               score_12: int, score_34: int, points: int, sinks: int,
-              timestamp: int) -> bool:
+              timestamp: int, elo_1: int, elo_2: int, elo_3: int,
+              elo_4: int) -> bool:
     """ Given the necessary data entries, logs game score to database. """
     indata: Score = Score(player_1, player_2, player_3, player_4,
-                          score_12, score_34, points, sinks, timestamp)
+                          score_12, score_34, points, sinks, timestamp,
+                          elo_1, elo_2, elo_3, elo_4)
     data: Dict = copy(indata.__dict__)
     del data["_sa_instance_state"]
     try:
