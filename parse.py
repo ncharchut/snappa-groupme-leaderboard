@@ -1,9 +1,11 @@
+import groupme_message_type as gm
 from pyparsing import Word, OneOrMore, Group,\
     Optional, nums, alphanums, Suppress, CaselessKeyword
 from pyparsing import pyparsing_common as cmn
+from typing import Any
 
 
-def score_parse(raw_string):
+def score_parse(raw_string: str) -> Any:
     """
     Parses the given input text as defined below. Returns
     an exception if formatting is not met.
@@ -17,20 +19,20 @@ def score_parse(raw_string):
         [list]: parsed input, if accepted.
         [Exception]: if not accepted.
     """
-    SCORE_COMMAND: str = "/score"
-
-    init = Suppress(CaselessKeyword(SCORE_COMMAND))
+    init = Suppress(CaselessKeyword(gm.RECORD_SCORE))
     score = Word(nums, max=2).setParseAction(cmn.convertToInteger)
     score_delims = Suppress(Optional(Word("|,-")))
+    paren_open = Suppress(Word('[('))
+    paren_closed = Suppress(Word('])'))
 
     # Tagging a user with optional mugs and sinks.
     mention = Suppress('@') +\
         OneOrMore(Word(alphanums)).setParseAction(' '.join)
-    points_sinks = Optional(Suppress(Word('[(')) +
+    points_sinks = Optional(paren_open +
                             Optional(score, default=0) +
                             score_delims +
                             Optional(score, default=0) +
-                            Suppress(Word('])'))
+                            paren_closed
                             ).setParseAction(cmn.convertToInteger)
     total_score = score + score_delims + score
     mentions = OneOrMore(Group(mention + points_sinks))
@@ -40,6 +42,24 @@ def score_parse(raw_string):
         mentions + Suppress(Optional(Word(",|.;/"))) + Group(total_score)
     try:
         res = score_parse.parseString(raw_string)
+        return True, res
+    except Exception as e:
+        print("Failed.")
+        return False, e
+
+
+def add_user(raw_string: str) -> Any:
+    init = Suppress(CaselessKeyword(gm.ADD_USER))
+
+    # Tagging a user with optional mugs and sinks.
+    mention = Suppress('@' +
+                       OneOrMore(Word(alphanums)).setParseAction(' '.join))
+    full_name = OneOrMore(Word(alphanums)).setParseAction(' '.join)
+
+    add_user_parse = init + mention + Suppress(',') + full_name
+
+    try:
+        res = add_user_parse.parseString(raw_string)
         return True, res
     except Exception as e:
         print("Failed.")

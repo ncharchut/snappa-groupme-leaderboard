@@ -1,7 +1,7 @@
 def create_score_data_object(db):
     class Score(db.Model):
         """ Schema for score submission for a given match. """
-        __tablename__ = 'snappa-scores'
+        __tablename__ = 'records'
 
         id = db.Column(db.Integer, primary_key=True)
 
@@ -30,17 +30,29 @@ def create_score_data_object(db):
         # Timestamp for the match.
         timestamp = db.Column(db.Integer)
 
+        # Rank per player (BEFORE the match).
+        elo_1 = db.Column(db.Integer, default=1000)
+        elo_2 = db.Column(db.Integer, default=1000)
+        elo_3 = db.Column(db.Integer, default=1000)
+        elo_4 = db.Column(db.Integer, default=1000)
+
         def __init__(self, player_1, player_2, player_3, player_4,
-                     score_12, score_34, points, sinks, timestamp):
+                     score_12, score_34, points, sinks,
+                     elo_1, elo_2, elo_3, elo_4, timestamp):
             self.player_1 = player_1
             self.player_2 = player_2
             self.player_3 = player_3
             self.player_4 = player_4
             self.points_1, self.points_2, self.points_3, self.points_4 = points
             self.sinks_1, self.sinks_2, self.sinks_3, self.sinks_4 = sinks
+            self.timestamp = timestamp
+
             self.score_12 = score_12
             self.score_34 = score_34
-            self.timestamp = timestamp
+            self.elo_1 = elo_1
+            self.elo_2 = elo_2
+            self.elo_3 = elo_3
+            self.elo_4 = elo_4
 
         def __repr__(self):
             return f"<id {self.id}>"
@@ -51,16 +63,16 @@ def create_score_data_object(db):
     return Score
 
 
-def create_rank_data_object(db):
-    class Rank(db.Model):
+def create_stats_data_object(db):
+    class Stats(db.Model):
         """ Schema for people and rankings. """
-        __tablename__ = 'rankings'
+        __tablename__ = 'stats'
         id = db.Column(db.Integer, primary_key=True)
 
         # Player information.
         player_id = db.Column(db.String())
         name = db.Column(db.String())
-        rank = db.Column(db.Integer)
+        elo = db.Column(db.Integer, default=1000)
 
         # Career stats.
         games = db.Column(db.Integer, default=0)
@@ -69,11 +81,10 @@ def create_rank_data_object(db):
         points = db.Column(db.Integer, default=0)
         sinks = db.Column(db.Integer, default=0)
 
-        def __init__(self, player_id, name, initial_rank):
+        def __init__(self, player_id, name):
             self.player_id = player_id
             self.name = name
-            self.rank = initial_rank
 
         def __repr__(self):
-            return f"<id {self.id}>"
-    return Rank
+            return f"<id {self.name}>"
+    return Stats

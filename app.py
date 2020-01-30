@@ -1,10 +1,9 @@
-import csv
 import json
 import models
 import os
 import parse
-import random
 import requests
+import settings
 import sys
 import groupme_message_type as gm
 
@@ -13,8 +12,8 @@ from copy import copy
 from flask import Flask, request
 from flask_heroku import Heroku
 from flask_sqlalchemy import SQLAlchemy
-from textblob import TextBlob
-from typing import Any, Dict, List, Tuple
+from taunt import taunt
+from typing import Any, Dict, List, Set, Tuple
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -29,9 +28,10 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 heroku = Heroku(app)
 db = SQLAlchemy(app)
 Score = models.create_score_data_object(db)
-Rank = models.create_rank_data_object(db)
+Stats = models.create_stats_data_object(db)
 init_rank = False
 
+GroupMe = Dict
 Response = Tuple[str, int]
 
 
@@ -73,11 +73,55 @@ def webhook() -> Response:
         response = gm.HELP_STRING_V
     elif (text.startswith(gm.HELP)):
         response = gm.HELP_STRING
+    elif (text.startswith(gm.ADD_USER)):
+        response = "Only an admin can add users."\
+                if sender not in admin else add_user(message)
     elif gm.BOT_NAME in text.lower():
         response = taunt(message.get('text', ''))
 
     print(message)
     return send_response(response)
+
+
+def add_user(message: GroupMe) -> str:
+    ids: List[str] = os.environ.get('IDS', '').split('%')
+    current_users: Set[str] = set(map(lambda x: x[-1], ids))
+    mentions = message.get('attachments', [{}])[0].get('user_ids', [])
+
+    if len(mentions) == 0:
+        return "No tags detected, try again."
+
+    mentioned: str = mentions[0]
+    if mentioned in current_users:
+        return "User already added."
+
+    text: str = message.get('text', '')
+    (ok, parsed) = parse.add_user(text)
+    msg: str = ''
+    if not ok:
+        msg += "Invalid. Must be `/add @mention, NAME`."
+    else:
+        full_name: str = parsed[0]
+        indata = Stats(mentioned, full_name)
+        data = copy(indata.__dict__)
+        del data["_sa_instance_state"]
+        if app.debug:
+            name_string = mentioned + '-' + full_name
+            os.environ["TEST"] = name_string
+        else:
+            try:
+                db.session.add(indata)
+                db.session.commit()
+                msg += f"{full_name} added."
+                name_string = mentioned + '-' + full_name
+                os.environ["TEST"] = name_string
+            except Exception as e:
+                print(f"FAILED entry: {json.dumps(data)}\n")
+                print(e)
+                sys.stdout.flush()
+                return False
+
+    return msg
 
 
 def send_response(response: Any) -> Response:
@@ -100,47 +144,6 @@ def send_response(response: Any) -> Response:
             reply(response)
     print(response)
     return 'ok', 200
-
-
-def taunt(text: str) -> str:
-    """
-    Generates a taunt or corresponding response to messages
-    that are directed at the bot.
-
-    Args:
-        text [str]: The text of the incoming GroupMe message.
-
-    Returns:
-        str: An emotional response from its phrase repository.
-    """
-    blob = TextBlob(text)
-    polarity, subjectivity = blob.sentiment
-    sentiment = gm.Sentiment.NEUTRAL
-    if polarity < -0.3:
-        sentiment = gm.Sentiment.BAD
-    elif polarity > 0.3:
-        sentiment = gm.Sentiment.GOOD
-    return get_emotional_response(sentiment)
-
-
-def get_emotional_response(sentiment: gm.Sentiment) -> str:
-    """
-    Generates an emotional response of the given sentiment.
-
-    Args:
-        sentiment [Sentiment]: Enum describing message sentiment.
-
-    Returns:
-        str: Chosen respnose to the identified sentiment.
-    """
-    level: str = sentiment.name.lower()
-    file = f"resources/responses/{level}.csv"
-    response = ''
-    with open(file, 'r') as responses:
-        reader = list(csv.reader(responses))
-        response = random.choice(reader)[0]
-
-    return response
 
 
 def score(message: Dict, check: bool = False) -> str:
@@ -169,7 +172,7 @@ def score(message: Dict, check: bool = False) -> str:
         if len(players) == 0:
             msg += note
         else:
-            add_to_db(*db_data)
+            add_to_db(db, *db_data)
             msg += match_string(db_data)
             if len(note) > 0:
                 msg += "-------------------------\n"
@@ -202,7 +205,7 @@ def generate_leaderboard() -> str:
     """
     Generates and returns the leaderboard string by querying the database.
     """
-    ranks: List[Rank] = Rank.query.order_by(Rank.name).limit(15)
+    ranks: List[Stats] = Stats.query.order_by(Stats.name).limit(15)
     msg: str = 'LEADERBOARD\n'.rjust(10)
     msg += '-------------------------\n'
 
@@ -264,11 +267,11 @@ def _process_data_for_db(parsed: List[Any], message: Dict) -> Tuple[List, str]:
     db_data: List = []
 
     # Error checking.
-    if max(score_12, score_34) < 7:
+    if max(score_12, score_34) < settings.MIN_SCORE_TO_WIN:
         note = "Games to less than 7 are for the weak. Disregarded."
 
-    if abs(score_12 - score_34) < 2:
-        note = "It's win by 2, numbnut."
+    if abs(score_12 - score_34) < settings.WIN_BY:
+        note = f"It's win by {settings.WIN_BY}, numbnut."
 
     if (sum(points[:2]) != 0):
         if (sum(points[:2]) != score_12):
@@ -283,7 +286,7 @@ def _process_data_for_db(parsed: List[Any], message: Dict) -> Tuple[List, str]:
     if sum(sinks) > (score_12 + score_34):
         note = "More sinks than total points? Nice."
 
-    for player in range(4):
+    for player in settings.NUM_PLAYERS:
         if points[player] < sinks[player]:
             note = (f"I don't know how {players[player][0]} sunk more "
                     "times than scored, but I'm impressed.")
@@ -291,13 +294,14 @@ def _process_data_for_db(parsed: List[Any], message: Dict) -> Tuple[List, str]:
     if len(note) == 0:
         db_data = [player_1, player_2, player_3, player_4, score_12,
                    score_34, points, sinks, timestamp]
-        if abs(score_12 - score_34) > 4:
+        if abs(score_12 - score_34) > settings.MERCY_THRESHOLD:
             note = "I smell a naked lap coming."
 
     return db_data, note
 
 
-def add_to_db(player_1: str, player_2: str, player_3: str, player_4: str,
+def add_to_db(db: Any,
+              player_1: str, player_2: str, player_3: str, player_4: str,
               score_12: int, score_34: int, points: int, sinks: int,
               timestamp: int) -> bool:
     """ Given the necessary data entries, logs game score to database. """
@@ -326,8 +330,7 @@ def __init_rankings() -> bool:
     raw_ids_names = os.environ.get('IDS', '').split(':')
     for item in raw_ids_names:
         groupme_id, name = item.split('%')
-        # Initial rankings are all 1 for now.
-        indata = Rank(groupme_id, name, 1)
+        indata = Stats(groupme_id, name)
         data = copy(indata.__dict__)
         del data["_sa_instance_state"]
         if app.debug:
@@ -405,5 +408,5 @@ def sender_is_bot(message):
 
 
 if __name__ == "__main__":
-    app.debug = False
+    app.debug = True
     app.run(host='0.0.0.0')

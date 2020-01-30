@@ -10,7 +10,7 @@ class Sentiment(Enum):
 ERROR_STRING = ("Invalid. "
                 "Must be `/score @A @B @C @D, SCORE_AB - SCORE_CD` or\n"
                 "`/score @A (p1 s1) @B (p2 s2)"
-                " @C (p3 s3) @D (p4 s4), SCORE_AB - SCORE_CD")
+                " @C (p3 s3) @D (p4 s4), SCORE_AB - SCORE_CD`")
 
 HELP_STRING_V = ("Sup, bitches. It's ScoreBot. Here's the lowdown.\n\n"
                  "Anyone can send a score, but an admin has to"
@@ -51,10 +51,11 @@ HELP_STRING = (f"To score a match: \n"
                " Let's toss some dye.")
 
 # Constants for the names of the various commands.
+ADD_USER = "/add"
 ADMIN_VERIFY = "/check"
-RECORD_SCORE = "/score"
-LEADERBOARD = "/leaderboard"
 BOT_NAME = "scorebot"
 HELP = "/help"
 HELP_V = "/helpv"
 LB = "/lb"
+LEADERBOARD = "/leaderboard"
+RECORD_SCORE = "/score"
