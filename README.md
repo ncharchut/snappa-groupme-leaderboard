@@ -16,10 +16,10 @@ is the score of the team of players 3 and 4.
 
 For 1 v. 1 games (though this currently is not a functionality),
 
-`/score @player1 @player2 SCORE_1 - SCORE_2`
+`/score @player1 @player2, SCORE_1 - SCORE_2`
 
-To see the leaderboard, simply chat, `/rankings`. Don't be the
-person who checks rankings after every game. Have to keep that chat _clean_.
+To see the leaderboard, simply chat, `/leaderboard` or `/lb`. Don't be the
+person who checks rankings after every game. Have to keep that chat *_clean_*.
 
 ## Todo
 - [x] Score/input validation.
