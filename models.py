@@ -55,7 +55,9 @@ def create_score_data_object(db):
             self.elo_4 = elo_4
 
         def __repr__(self):
-            return f"<id {self.id}>"
+            return (f"<id {self.id} | {self.player_1} | {self.player_2}"
+                    f" | {self.player_3} | {self.player_4} |"
+                    f"{self.score_12} | {self.score_34}")
 
         def __team_of_two(self, team):
             """ Will be used when database supports 1 v. 1 matches. """

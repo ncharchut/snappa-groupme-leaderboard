@@ -76,12 +76,12 @@ def webhook() -> Response:
     elif (text.startswith(gm.ADD_USER)):
         response = "Only an admin can add users."\
                 if sender not in admin else add_user(message)
-    elif (text == "/replay") and sender in admin:
-        replay_records()
+    elif (text.startswith("/refresh")) and sender in admin:
+        refresh_records()
+        response = "Leaderboard refreshed."
     elif gm.BOT_NAME in text.lower():
         response = taunt(message.get('text', ''))
 
-    print(message)
     return send_response(response)
 
 
@@ -217,14 +217,15 @@ def generate_leaderboard() -> str:
     """
     Generates and returns the leaderboard string by querying the database.
     """
-    elos: List[Stats] = Stats.query.order_by(Stats.elo).limit(15)
+    elos: List[Stats] = Stats.query.filter(Stats.games != 0).order_by(
+            Stats.elo.desc()).limit(15)
     msg: str = 'LEADERBOARD\n'.rjust(10)
     msg += '-------------------------\n'
 
     for player in elos:
         name: str = player.name
         elo: int = player.elo
-        msg += f"{elo}   -   {name}\n"
+        msg += f"{str(elo).rjust(4)}   -   {name}\n"
 
     return msg
 
@@ -274,10 +275,11 @@ def _process_data_for_db(parsed: List[Any], message: Dict) -> Tuple[List, str]:
     player_names = list(map(lambda x: x[0], players))
     player_1, player_2, player_3, player_4 = player_names
 
-    stats: List[Stats] = Stats.query.filter((Stats.name == player_1) |
-                                            (Stats.name == player_2) |
-                                            (Stats.name == player_3) |
-                                            (Stats.name == player_4)).all()
+    stats_1 = Stats.query.filter(Stats.name == player_1).first()
+    stats_2 = Stats.query.filter(Stats.name == player_2).first()
+    stats_3 = Stats.query.filter(Stats.name == player_3).first()
+    stats_4 = Stats.query.filter(Stats.name == player_4).first()
+    stats = [stats_1, stats_2, stats_3, stats_4]
 
     elo_1, elo_2, elo_3, elo_4 = calculate_elo(stats, score_12, score_34)
 
@@ -318,51 +320,72 @@ def _process_data_for_db(parsed: List[Any], message: Dict) -> Tuple[List, str]:
         if abs(score_12 - score_34) > settings.MERCY_THRESHOLD:
             note = "I smell a naked lap coming."
 
+    indata: Score = Score(*db_data)
+    data: Dict = copy(indata.__dict__)
+    del data["_sa_instance_state"]
+    try:
+        if not app.debug:
+            for player in range(4):
+                update_player_stats(stats[player], player, indata)
+            db.session.commit()
+
+    except Exception as e:
+        print(f"FAILED entry: {json.dumps(data)}\n")
+        print(e)
+        sys.stdout.flush()
+
     return db_data, note
 
 
-def calculate_elo(stats: Stats, score_a, score_b):
+def calculate_elo(stats: List[Stats], score_a, score_b):
     elo_1, elo_2, elo_3, elo_4 = list(map(lambda x: x.elo, stats))
     team_a_avg = 0.5 * (elo_1 + elo_2)
     team_b_avg = 0.5 * (elo_3 + elo_4)
-    expected_a = 1 / (1 + 10 ** ((team_b_avg - team_a_avg) / 500))
-    expected_b = 1 / (1 + 10 ** ((team_a_avg - team_b_avg) / 500))
+    expected_a = 1 / (1 + 10 ** ((team_b_avg - team_a_avg) / 400))
     score_p_a = score_a / (score_a + score_b)
-    score_p_b = 1 - score_p_a
 
-    elo_delta_a = settings.K * (score_p_a - expected_a)
-    elo_delta_b = settings.K * (score_p_b - expected_b)
+    score_diff = abs(score_a - score_b)
+    mult = 1
+    if 2 <= score_diff <= 3:
+        mult = 1.5
+    elif score_diff == 4:
+        mult = 1.75
+    elif 5 <= score_diff <= 7:
+        mult = 1.75 + (score_diff - 4) * 0.125
 
-    return (elo_1 + elo_delta_a, elo_2 + elo_delta_a,
-            elo_3 + elo_delta_b, elo_4 + elo_delta_b)
+    elo_delta = mult * settings.K * (score_p_a - expected_a)
+    if score_a > score_b:
+        return (elo_1 + elo_delta, elo_2 + elo_delta,
+                elo_3 - elo_delta, elo_4 - elo_delta)
+    return (elo_1 - elo_delta, elo_2 - elo_delta,
+            elo_3 + elo_delta, elo_4 + elo_delta)
 
 
-def replay_records():
+def refresh_records():
     records = Score.query.order_by(Score.timestamp).all()
     n_records = len(records)
-    stats = Stats.query.all()
-    stats_dict = {stat.name: stat for stat in stats}
 
-    for j, record in enumerate(records):
+    for j in range(1, n_records + 1):
+        record = Score.query.filter(Score.id == j).first()
+        stats = Stats.query.all()
+        stats_dict = {stat.name: stat for stat in stats}
+        elos = calculate_elo([stats_dict[record.player_1],
+                              stats_dict[record.player_2],
+                              stats_dict[record.player_3],
+                              stats_dict[record.player_4]],
+                             record.score_12,
+                             record.score_34)
+        record.elo_1 = elos[0]
+        record.elo_2 = elos[1]
+        record.elo_3 = elos[2]
+        record.elo_4 = elos[3]
         for i, player in enumerate([record.player_1,
                                     record.player_2,
                                     record.player_3,
                                     record.player_4]):
             player_stat = stats_dict[player]
+            player_stat.elo = elos[i]
             update_player_stats(player_stat, i, record)
-        # Update future elo, so things work out.
-        if j < (n_records - 1):
-            future_record = records[j + 1]
-            future_record.elo_1 = player_stat.elo_1
-            future_record.elo_2 = player_stat.elo_2
-            future_record.elo_3 = player_stat.elo_3
-            future_record.elo_4 = player_stat.elo_4
-
-    if app.debug:
-        for record in records:
-            print(record)
-            print(stats)
-    else:
         db.session.commit()
 
 
@@ -375,13 +398,22 @@ def update_player_stats(player, player_number, record):
     elos = [record.elo_1, record.elo_2,
             record.elo_3, record.elo_4]
     if record.score_12 > record.score_34:
-        if player_number in [1, 2]:
+        if player_number in [0, 1]:
             player.wins = Stats.wins + 1
         else:
             player.losses = Stats.losses + 1
+    if record.score_12 < record.score_34:
+        if player_number in [2, 3]:
+            player.losses = Stats.losses + 1
+        else:
+            player.wins = Stats.wins + 1
     player.points = Stats.points + points[player_number]
     player.sinks = Stats.sinks + sinks[player_number]
     player.elo = elos[player_number]
+
+    if app.debug:
+        print((f"Updating {player.name}: {player.wins}, "
+               f"{player.losses}, {player.elo}"))
 
 
 def add_to_db(db: Any,
@@ -398,8 +430,8 @@ def add_to_db(db: Any,
     try:
         if app.debug:
             return True
-        db.session.add(indata)
-        db.session.commit()
+        # db.session.add(indata)
+        # db.session.commit()
     except Exception as e:
         print(f"FAILED entry: {json.dumps(data)}\n")
         print(e)
