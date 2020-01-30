@@ -23,7 +23,7 @@ person who checks rankings after every game. Have to keep that chat _clean_.
 
 ## Todo
 - [x] Score/input validation.
-- [ ] Set up Postgres database and record matches using the above command.
+- [x] Set up Postgres database and record matches using the above command.
 - [ ] Add admin functionality to strike games from the record.
 - [x] Additional functionalities (e.g. mugs/sinks per game)
 - [ ] Make it work for 1 v. 1 games.
