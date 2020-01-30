@@ -282,6 +282,8 @@ def _process_data_for_db(parsed: List[Any], message: Dict) -> Tuple[List, str]:
     stats = [stats_1, stats_2, stats_3, stats_4]
 
     elo_1, elo_2, elo_3, elo_4 = calculate_elo(stats, score_12, score_34)
+    if app.debug:
+        print(elo_1, elo_2, elo_3, elo_4)
 
     points = list(map(lambda x: 0 if len(x) == 1 else x[1], players))
     sinks = list(map(lambda x: 0 if len(x) == 1 else x[2], players))
@@ -338,27 +340,31 @@ def _process_data_for_db(parsed: List[Any], message: Dict) -> Tuple[List, str]:
 
 
 def calculate_elo(stats: List[Stats], score_a, score_b):
+    """
+    Calculates updated elo ratings for the players involved in the match.
+    """
     elo_1, elo_2, elo_3, elo_4 = list(map(lambda x: x.elo, stats))
+    # Teams are considered as single players, averaging their Elo.
     team_a_avg = 0.5 * (elo_1 + elo_2)
     team_b_avg = 0.5 * (elo_3 + elo_4)
     expected_a = 1 / (1 + 10 ** ((team_b_avg - team_a_avg) / 400))
+
+    # Win probability is the # points a team scorse divided by the total.
     score_p_a = score_a / (score_a + score_b)
 
+    # K-factor multiplier to account for larger margins.
     score_diff = abs(score_a - score_b)
     mult = 1
     if 2 <= score_diff <= 3:
         mult = 1.5
-    elif score_diff == 4:
-        mult = 1.75
-    elif 5 <= score_diff <= 7:
+    elif 4 <= score_diff <= 7:
         mult = 1.75 + (score_diff - 4) * 0.125
 
     elo_delta = mult * settings.K * (score_p_a - expected_a)
-    if score_a > score_b:
-        return (elo_1 + elo_delta, elo_2 + elo_delta,
-                elo_3 - elo_delta, elo_4 - elo_delta)
-    return (elo_1 - elo_delta, elo_2 - elo_delta,
-            elo_3 + elo_delta, elo_4 + elo_delta)
+    delta_a = 1 if score_a > score_b else -1
+    delta_b = 1 if score_b > score_a else -1
+    return (elo_1 + delta_a * elo_delta, elo_2 + delta_a * elo_delta,
+            elo_3 + delta_b * elo_delta, elo_4 + delta_b * elo_delta)
 
 
 def refresh_records():
@@ -430,8 +436,8 @@ def add_to_db(db: Any,
     try:
         if app.debug:
             return True
-        # db.session.add(indata)
-        # db.session.commit()
+        db.session.add(indata)
+        db.session.commit()
     except Exception as e:
         print(f"FAILED entry: {json.dumps(data)}\n")
         print(e)
