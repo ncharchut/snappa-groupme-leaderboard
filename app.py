@@ -84,8 +84,9 @@ def webhook() -> Response:
 
 
 def add_user(message: GroupMe) -> str:
-    ids: List[str] = os.environ.get('IDS', '').split('%')
-    current_users: Set[str] = set(map(lambda x: x[-1], ids))
+    raw_string: str = os.environ.get('IDS', '')
+    ids: List[str] = raw_string.split(':')
+    current_users: Set[str] = set(map(lambda x: x.split('%')[0], ids))
     mentions = message.get('attachments', [{}])[0].get('user_ids', [])
 
     if len(mentions) == 0:
@@ -105,16 +106,12 @@ def add_user(message: GroupMe) -> str:
         indata = Stats(mentioned, full_name)
         data = copy(indata.__dict__)
         del data["_sa_instance_state"]
-        if app.debug:
-            name_string = mentioned + '-' + full_name
-            os.environ["TEST"] = name_string
-        else:
+        name_string = mentioned + '%' + full_name
+        if not set_config_var('IDS', f"{raw_string}:{name_string}"):
             try:
                 db.session.add(indata)
                 db.session.commit()
                 msg += f"{full_name} added."
-                name_string = mentioned + '-' + full_name
-                os.environ["TEST"] = name_string
             except Exception as e:
                 print(f"FAILED entry: {json.dumps(data)}\n")
                 print(e)
@@ -122,6 +119,19 @@ def add_user(message: GroupMe) -> str:
                 return False
 
     return msg
+
+
+def set_config_var(var: str, value: Any) -> None:
+    url = 'https://api.heroku.com/apps/snappa-groupme-leaderboard/config-vars'
+    token = os.environ.get('HEROKU_TOKEN')
+    data = {var: value}
+    headers = {'Authorization': f"Bearer {token}",
+               'Accept': 'application/vnd.heroku+json; version=3',
+               'Content-Type': 'application/json'}
+
+    if 'BOT_ID' in requests.patch(url, headers=headers, json=data):
+        return True
+    return False
 
 
 def send_response(response: Any) -> Response:
