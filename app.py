@@ -62,7 +62,7 @@ def webhook() -> Response:
     response: str = ''
     if text.startswith(gm.RECORD_SCORE):
         response = "Waiting for approval." if sender not in admin\
-                    else score(message, check=True)
+                    else score(message, check=False)
     elif (text.startswith(gm.LEADERBOARD) or
           text.startswith(gm.LB)):
         response = generate_leaderboard()
@@ -322,19 +322,19 @@ def _process_data_for_db(parsed: List[Any], message: Dict) -> Tuple[List, str]:
         if abs(score_12 - score_34) > settings.MERCY_THRESHOLD:
             note = "I smell a naked lap coming."
 
-    indata: Score = Score(*db_data)
-    data: Dict = copy(indata.__dict__)
-    del data["_sa_instance_state"]
-    try:
-        if not app.debug:
-            for player in range(4):
-                update_player_stats(stats[player], player, indata)
-            db.session.commit()
+        indata: Score = Score(*db_data)
+        data: Dict = copy(indata.__dict__)
+        del data["_sa_instance_state"]
+        try:
+            if not app.debug:
+                for player in range(4):
+                    update_player_stats(stats[player], player, indata)
+                db.session.commit()
 
-    except Exception as e:
-        print(f"FAILED entry: {json.dumps(data)}\n")
-        print(e)
-        sys.stdout.flush()
+        except Exception as e:
+            print(f"FAILED entry: {json.dumps(data)}\n")
+            print(e)
+            sys.stdout.flush()
 
     return db_data, note
 
