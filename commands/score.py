@@ -14,6 +14,7 @@ class ScoreCommand(BaseCommand):
         self.players = self.get_players()
         self.scores = self.get_scores()
         self.check = check
+        self.elo_delta = [0 for _ in range(settings.NUM_PLAYERS)]
 
     def get_players(self):
         if not self.ok:
@@ -35,7 +36,7 @@ class ScoreCommand(BaseCommand):
             return
         return list(map(int, self.parsed.args))
 
-    def calculate_elo(self, stats: List):
+    def calculate_elo(self, stats: List, scores=None):
         """
         Calculates updated elo ratings for the players involved in the match.
         """
@@ -52,16 +53,16 @@ class ScoreCommand(BaseCommand):
         # K-factor multiplier to account for larger margins.
         score_diff = abs(score_a - score_b)
         mult = 1
-        if 2 <= score_diff <= 3:
+        if 3 <= score_diff <= 4:
             mult = 1.5
-        elif 4 <= score_diff <= 7:
-            mult = 1.75 + (score_diff - 4) * 0.125
+        elif 5 <= score_diff:
+            mult = 1.75
 
         elo_delta = mult * settings.K * (score_p_a - expected_a)
-        delta_a = 1 if score_a > score_b else -1
-        delta_b = 1 if score_b > score_a else -1
-        return (elo_1 + delta_a * elo_delta, elo_2 + delta_a * elo_delta,
-                elo_3 + delta_b * elo_delta, elo_4 + delta_b * elo_delta)
+        self.elo_delta = elo_delta
+
+        return (elo_1 + elo_delta, elo_2 + elo_delta,
+                elo_3 - elo_delta, elo_4 - elo_delta)
 
     def generate_message(self):
         if not self.ok:
@@ -79,15 +80,26 @@ class ScoreCommand(BaseCommand):
             return f"It's win by {settings.WIN_BY}, numbnut."
 
         player_1, player_2, player_3, player_4 = self.players
+        negative = self.elo_delta < 0
+        self.elo_delta = abs(self.elo_delta)
+
+        sign_1 = '-' if negative else '+'
+        sign_2 = '+' if negative else '-'
+        d_1 = f"{sign_1}{self.elo_delta:.04}"
+        d_2 = f"{sign_2}{self.elo_delta:.04}"
+        win_1 = f"W: {d_1}  "
+        lose_1 = f"L: {d_1}  "
+        win_2 = f"W: {d_2}  "
+        lose_2 = f"L: {d_2}  "
         msg: str = (f"Match recorded, score of {score_1} - {score_2}.\n"
                     "-------------------------\n"
-                    f"{'W: ' if score_1 > score_2 else 'L: '}"
+                    f"{win_1 if score_1 > score_2 else lose_1}"
                     f"{player_1}, {player_2}\n"
-                    f"{'W: ' if score_2 > score_1 else 'L: '}"
+                    f"{win_2 if score_2 > score_1 else lose_2}"
                     f"{player_3}, {player_4}\n"
                     "-------------------------\n")
 
-        if abs(score_1 - score_2) >= settings.MERCY_THRESHOLD:
+        if abs(score_1 - score_2) > settings.MERCY_THRESHOLD:
             msg += "I smell a naked lap coming."
 
         return msg

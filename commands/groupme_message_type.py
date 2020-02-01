@@ -8,9 +8,7 @@ class Sentiment(Enum):
 
 
 ERROR_STRING = ("Invalid. "
-                "Must be `/score @A @B @C @D, SCORE_AB - SCORE_CD` or\n"
-                "`/score @A (p1 s1) @B (p2 s2)"
-                " @C (p3 s3) @D (p4 s4), SCORE_AB - SCORE_CD`")
+                "Must be `/score @A @B @C @D, SCORE_AB - SCORE_CD`\n")
 
 HELP_STRING_V = ("Sup, bitches. It's ScoreBot. Here's the lowdown.\n\n"
                  "Anyone can send a score, but an admin has to"
@@ -19,36 +17,28 @@ HELP_STRING_V = ("Sup, bitches. It's ScoreBot. Here's the lowdown.\n\n"
                  " admins do not need my approval."
                  " Check this chat's topic to see who they are!\n\n"
                  "To score a match: \n"
-                 "`/score @A @B @C @D, SCORE_AB - SCORE_CD` or\n"
-                 "\t`/score @A (p1 s1) @B (p2 s2)`"
-                 " @C (p3 s3) @D (p4 s4), SCORE_AB - SCORE_CD`\n\n"
-                 "Note a couple things here. One, if you log player points"
-                 " (the `p`s above; optional), you must do it for both"
-                 " people on the team. The same doesn't apply for sinks"
-                 " (the `s`s; also optional), since I'll assume you won't sink"
-                 " shit. You must also include the brackets/parens.\n\n"
-                 "To see the leaderboard (currently meaningless):\n"
+                 "`/score @A @B @C @D, SCORE_AB - SCORE_CD` \n\n"
+                 "To see the leaderboard:\n"
                  "`/leaderboard` or `/lb`\n\n"
                  "To get help:\n"
                  "`/help` or `/helpv` for verbose help.\n\n"
-                 "Games must be to 7, win by 2, drinking thirds, no questions."
+                 "Games must be to 7, win by 2, no questions."
+                 " Drinking thirds will always hold unless all "
+                 "both parties agree on a different amount (does not apply"
+                 " in tournament settings."
                  " That's all from me, let's toss some dye.")
 
 HELP_STRING = (f"To score a match: \n"
-               "`/score @A @B @C @D, SCORE_AB - SCORE_CD` or\n"
-               "\t`/score @A (p1 s1) @B (p2 s2)`"
-               " @C (p3 s3) @D (p4 s4), SCORE_AB - SCORE_CD`\n\n"
-               "Note a couple things here. One, if you log player points"
-               " (the `p`s above; optional), you must do it for both"
-               " people on the team. The same doesn't apply for sinks"
-               " (the `s`s; also optional), since I'll assume you won't sink"
-               " shit. You must also include the brackets/parens.\n\n"
+               "`/score @A @B @C @D, SCORE_AB - SCORE_CD` or\n\n"
                "To see the leaderboard (currently meaningless):\n"
                "`/leaderboard` or `/lb`\n\n"
                "To get help:\n"
                "`/help` or `/helpv` for verbose help.\n\n"
-               " Games must be to 7, win by 2, drinking thirds, no questions."
-               " Let's toss some dye.")
+               "Games must be to 7, win by 2, no questions."
+               " Drinking thirds will always hold unless all "
+               "both parties agree on a different amount (does not apply"
+               " in tournament settings."
+               " That's all from me, let's toss some dye.")
 
 # Constants for the names of the various commands.
 ADD_USER = "/add"

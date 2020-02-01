@@ -5,7 +5,7 @@ class BaseCommand(object):
     def __init__(self, message):
         self.message = message
         self.text = message.get('text', '')
-        self.ok, self.parsed = parse_input(self.text.lower())
+        self.ok, self.parsed = parse_input(self.text)
         self.mentions = self.get_mentions()
         self.timestamp = self.message.get('created_at', None)
 
@@ -13,6 +13,9 @@ class BaseCommand(object):
         return self.message.get('sender_id', None)
 
     def get_mentions(self):
+        attachments = self.message.get('attachments')
+        if len(attachments) == 0:
+            return []
         return self.message.get('attachments', [{}])[0].get('user_ids', [])
 
     def generate_message(self):

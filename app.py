@@ -1,22 +1,21 @@
-# import json
 import os
-# import parse
 import requests
-# import settings
-# import sys
 import commands.groupme_message_type as gm
 
 
-# from copy import copy
 from flask import Flask, request
 from flask_heroku import Heroku
-from flask_sqlalchemy import SQLAlchemy
-# from taunt import taunt
+from taunt import taunt
 from typing import Any, Dict, List, Tuple
-# from urllib.parse import urlencode
-# from urllib.request import Request, urlopen
 from commands.score import ScoreCommand
+from commands.leaderboard import LeaderboardCommand
+from commands.add_user import AddCommand
+from commands.help import HelpCommand
 from commands.models import Score
+from commands.refresh import RefreshCommand
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+from database import db
 
 app = Flask(__name__)
 
@@ -27,7 +26,8 @@ if app.debug:
 # Initializing the app.
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 heroku = Heroku(app)
-db = SQLAlchemy(app)
+# db = SQLAlchemy(app)
+db.init_app(app)
 init_rank = False
 
 GroupMe = Dict
@@ -49,14 +49,10 @@ def webhook() -> Response:
     sender: str = message.get('sender_id', None)
     text: str = message.get('text', None)
 
-    # # Ignore messages sent from the bot.
-    # if sender_is_bot(message):
-    #     return 'ok', 200
+    # Ignore messages sent from the bot.
+    if sender_is_bot(message):
+        return 'ok', 200
 
-    # # Initializing the rankings should only happen once.
-    # if init_rank:
-    #     print("Initializing rankings..")
-    #     __init_rankings()
     commands = []
 
     if text.startswith(gm.RECORD_SCORE):
@@ -64,37 +60,57 @@ def webhook() -> Response:
             commands.append(ScoreCommand(message, check=True))
         else:
             commands.append(ScoreCommand(message))
-    # elif (text.startswith(gm.LEADERBOARD) or
-    #       text.startswith(gm.LB)):
-    #     response = generate_leaderboard()
+    elif (text.startswith(gm.LEADERBOARD) or
+          text.startswith(gm.LB)):
+        commands.append(LeaderboardCommand(message))
     elif (text.startswith(gm.ADMIN_VERIFY)) and sender in admin:
         messages = get_messages_before_id(message.get('id'))
         messages = filter_messages_for_scores(messages)
         for msg in messages:
             commands.append(ScoreCommand(msg))
-    # elif (text.startswith(gm.HELP_V)):
-    #     response = gm.HELP_STRING_V
-    # elif (text.startswith(gm.HELP)):
-    #     response = gm.HELP_STRING
-    # elif (text.startswith(gm.ADD_USER)):
-    #     response = "Only an admin can add users."\
-    #             if sender not in admin else add_user(message)
-    # elif (text.startswith("/refresh")) and sender in admin:
-    #     refresh_records()
-    #     response = generate_leaderboard()
-    # elif gm.BOT_NAME in text.lower():
-    #     response = taunt(message.get('text', ''))
+    elif (text.startswith(gm.HELP_V)):
+        commands.append(HelpCommand(message, verbose=True))
+    elif (text.startswith(gm.HELP)):
+        commands.append(HelpCommand(message))
+    elif (text.startswith(gm.ADD_USER)):
+        command = AddCommand(message) if sender in admin else\
+            AddCommand(message, admin=False)
+        commands.append(command)
+    elif (text.startswith("/refresh")) and sender in admin:
+        commands.append(RefreshCommand(message))
+    elif gm.BOT_NAME in text.lower():
+        note = taunt(message.get('text', ''))
+        print(note)
+        if not app.debug:
+            reply(note)
 
     for command in commands:
-        note = command.generate_message()
         data = command.generate_data(db)
+        note = command.generate_message()
         print(note)
+
         if not app.debug:
             if data is not None:
                 db.session.add(data)
-                db.session.commit()
+            db.session.commit()
+            reply(note)
 
     return 'ok', 200
+
+
+def reply(msg: str) -> None:
+    """ Sends the bot's message via the GroupMe API. """
+    url = 'https://api.groupme.com/v3/bots/post'
+    data = {'bot_id': os.getenv('BOT_ID'),
+            'text': msg}
+    if data['bot_id'] is None:
+        print("BOT_ID environment variable not set. Please configure with\
+              `heroku config:set BOT_ID=ID`.")
+        return
+
+    request = Request(url, urlencode(data).encode())
+    response = urlopen(request).read().decode()
+    print(response)
 
 
 def get_messages_before_id(before_id: str) -> Dict:
@@ -107,7 +123,7 @@ def get_messages_before_id(before_id: str) -> Dict:
     url = f'https://api.groupme.com/v3/groups/{group_id}/messages'
     params = {'before_id': str(before_id),
               'token': token,
-              'limit': 20}
+              'limit': 10}
 
     msg_rqst = requests.get(url, params=params)
     return msg_rqst.json()['response']
@@ -134,6 +150,10 @@ def filter_messages_for_scores(messages: Dict) -> List[str]:
                     msgs.append(message)
 
     return msgs
+
+
+def sender_is_bot(message):
+    return message['sender_type'] == "bot"
 
 
 if __name__ == "__main__":

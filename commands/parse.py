@@ -85,7 +85,7 @@ def add_user(raw_string: str) -> Any:
 
 
 if __name__ == "__main__":
-    string = "/score @tommy @bo @me @you , 6-7"
+    string = "/add @Pam duke, Pam Duke"
     _, res = parse_input(string)
     print(res.args)
     print(res)

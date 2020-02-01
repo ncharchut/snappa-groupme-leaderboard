@@ -1,6 +1,6 @@
 import csv
 import random
-import groupme_message_type as gm
+import commands.groupme_message_type as gm
 from textblob import TextBlob
 
 
