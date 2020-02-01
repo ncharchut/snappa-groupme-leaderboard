@@ -1,8 +1,26 @@
-import groupme_message_type as gm
+import commands.groupme_message_type as gm
 from pyparsing import Word, OneOrMore, Group,\
     Optional, nums, alphanums, Suppress, CaselessKeyword
 from pyparsing import pyparsing_common as cmn
-from typing import Any
+from typing import Any, List
+import settings
+
+
+def parse_input(raw_string: str) -> Any:
+    command = (Suppress('/') + Word(alphanums).setResultsName('command'))
+    mention = Suppress('@') +\
+        OneOrMore(Word(alphanums + "'-")).setParseAction(' '.join)\
+        .setResultsName('mentions*')
+
+    args_delim = Suppress(',')
+    args = OneOrMore(Word(alphanums) + Optional(Suppress('-')))\
+        .setResultsName('args')
+    total = command + Optional(OneOrMore(mention) + args_delim + args)
+    try:
+        res: List = total.parseString(raw_string)
+        return True, res
+    except Exception:
+        return False, settings.ERR
 
 
 def score_parse(raw_string: str) -> Any:
@@ -67,6 +85,7 @@ def add_user(raw_string: str) -> Any:
 
 
 if __name__ == "__main__":
-    string = "/sCoRe @tommy [4] @bo [4 3] @me @you [3-5] 6 7"
-    _, res = score_parse(string)
+    string = "/score @tommy @bo @me @you , 6-7"
+    _, res = parse_input(string)
+    print(res.args)
     print(res)
