@@ -13,6 +13,7 @@ from commands.add_user import AddCommand
 from commands.help import HelpCommand
 from commands.models import Score
 from commands.refresh import RefreshCommand
+from commands.scoreboard import ScoreboardCommand
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from database import db
@@ -48,6 +49,7 @@ def webhook() -> Response:
 
     sender: str = message.get('sender_id', None)
     text: str = message.get('text', None)
+    print(message)
 
     # Ignore messages sent from the bot.
     if sender_is_bot(message):
@@ -76,6 +78,8 @@ def webhook() -> Response:
         command = AddCommand(message) if sender in admin else\
             AddCommand(message, admin=False)
         commands.append(command)
+    elif (text.startswith("/sb")):
+        commands.append(ScoreboardCommand(message))
     elif (text.startswith("/refresh")) and sender in admin:
         commands.append(RefreshCommand(message))
     elif gm.BOT_NAME in text.lower():
@@ -140,7 +144,7 @@ def filter_messages_for_scores(messages: Dict) -> List[str]:
     last_timestamp: int = last_updated_game.timestamp
 
     for message in messages.get('messages'):
-        text = message.get('text')
+        text = message.get('text', '')
         if text.startswith("/score"):
             timestamp = message.get("created_at")
             favorites = message.get('favorited_by')

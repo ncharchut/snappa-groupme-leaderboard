@@ -1,4 +1,5 @@
 from commands.parse import parse_input
+import os
 
 
 class BaseCommand(object):
@@ -11,6 +12,12 @@ class BaseCommand(object):
 
     def get_sender(self):
         return self.message.get('sender_id', None)
+
+    def translate(self, raw_id):
+        ids = map(lambda x: x.split('%'),
+                  (os.environ.get('IDS', '').split(':')))
+        convert_dict = {id: name for [id, name] in ids}
+        return convert_dict.get(raw_id, '')
 
     def get_mentions(self):
         attachments = self.message.get('attachments')

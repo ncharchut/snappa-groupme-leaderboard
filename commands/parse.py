@@ -15,7 +15,8 @@ def parse_input(raw_string: str) -> Any:
     args_delim = Suppress(',')
     args = OneOrMore(Word(alphanums) + Optional(Suppress('-')))\
         .setResultsName('args')
-    total = command + Optional(OneOrMore(mention) + args_delim + args)
+    total = command + Optional(OneOrMore(mention) +
+                               Optional(args_delim + args))
     try:
         res: List = total.parseString(raw_string)
         return True, res
