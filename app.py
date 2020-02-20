@@ -12,6 +12,7 @@ from commands.leaderboard import LeaderboardCommand
 from commands.add_user import AddCommand
 from commands.help import HelpCommand
 from commands.models import Score
+from commands.partner import PartnerCommand
 from commands.refresh import RefreshCommand
 from commands.scoreboard import ScoreboardCommand
 from urllib.parse import urlencode
@@ -62,6 +63,8 @@ def webhook() -> Response:
             commands.append(ScoreCommand(message, check=True))
         else:
             commands.append(ScoreCommand(message))
+    elif text.startswith(gm.PARTNER):
+        commands.append(PartnerCommand(message))
     elif (text.startswith(gm.LEADERBOARD) or
           text.startswith(gm.LB)):
         commands.append(LeaderboardCommand(message))
@@ -78,9 +81,9 @@ def webhook() -> Response:
         command = AddCommand(message) if sender in admin else\
             AddCommand(message, admin=False)
         commands.append(command)
-    elif (text.startswith("/sb")):
+    elif (text.startswith(gm.SB)):
         commands.append(ScoreboardCommand(message))
-    elif (text.startswith("/refresh")) and sender in admin:
+    elif (text.startswith(gm.REFRESH)) and sender in admin:
         commands.append(RefreshCommand(message))
     elif gm.BOT_NAME in text.lower():
         note = taunt(message.get('text', ''))
@@ -96,7 +99,7 @@ def webhook() -> Response:
         if not app.debug:
             if data is not None:
                 db.session.add(data)
-            db.session.commit()
+                db.session.commit()
             reply(note)
 
     return 'ok', 200
