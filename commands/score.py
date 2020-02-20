@@ -36,11 +36,14 @@ class ScoreCommand(BaseCommand):
             return
         return list(map(int, self.parsed.args))
 
-    def calculate_elo(self, stats: List, scores=None):
+    def calculate_elo(self, stats: List, scores):
         """
         Calculates updated elo ratings for the players involved in the match.
         """
         elo_1, elo_2, elo_3, elo_4 = list(map(lambda x: x.elo, stats))
+        games_1, games_2, games_3, games_4 = \
+            list(map(lambda x: x.games, stats))
+
         # Teams are considered as single players, averaging their Elo.
         team_a_avg = 0.5 * (elo_1 + elo_2)
         team_b_avg = 0.5 * (elo_3 + elo_4)
@@ -58,9 +61,12 @@ class ScoreCommand(BaseCommand):
         elif 5 <= score_diff:
             mult = 1.75
 
-        elo_delta = mult * settings.K * (score_p_a - expected_a)
-        self.elo_delta = elo_delta
+        # games_12 = 0.5 * (games_1 + games_2)
+        # games_34 = 0.5 * (games_3 + games_4)
+        # game_mult = (1 + min(games_12, games_34)) /\
+        #     max(1, max(games_12, games_34))
 
+        elo_delta = mult * settings.K * (score_p_a - expected_a)
         return (elo_1 + elo_delta, elo_2 + elo_delta,
                 elo_3 - elo_delta, elo_4 - elo_delta)
 

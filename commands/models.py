@@ -58,9 +58,9 @@ class Score(db.Model):
         self.elo_4 = elo_4
 
     def __repr__(self):
-        return (f"<id {self.id} | {self.player_1} | {self.player_2}"
-                f" | {self.player_3} | {self.player_4} |"
-                f"{self.score_12} | {self.score_34}\n"
+        return (f"<id {self.id} | {self.player_1.split(' ')[0]} | {self.player_2.split(' ')[0]}"
+                f" | {self.player_3.split(' ')[0]} | {self.player_4.split(' ')[0]} | "
+                f"{self.score_12} | {self.score_34} | "
                 f"{self.elo_1} | {self.elo_2} | {self.elo_3} | {self.elo_4}")
 
     def __team_of_two(self, team):

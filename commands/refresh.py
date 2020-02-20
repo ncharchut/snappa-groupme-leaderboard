@@ -2,6 +2,7 @@ from commands.models import Score, Stats
 from commands.leaderboard import LeaderboardCommand
 from commands import settings
 from typing import List
+import csv
 
 
 class RefreshCommand(LeaderboardCommand):
@@ -12,10 +13,24 @@ class RefreshCommand(LeaderboardCommand):
         return "Leaderboard refreshed.\n\n" +\
                 self.generate_leaderboard()
 
+    def load_prerankings(self):
+        file = "resources/prerankings.csv"
+        name_dict = {}
+        with open(file, 'r') as read_file:
+            reader = csv.reader(read_file)
+            for ranking in reader:
+                elo = ranking[0]
+                for name in ranking[1:]:
+                    name_dict[name] = elo
+
+        return name_dict
+
     def clean_stats(self, db):
         all_stats = Stats.query.all()
+        elo_dict = self.load_prerankings()
         for stat in all_stats:
-            stat.elo = 1000
+            name = stat.name
+            stat.elo = elo_dict.get(name, 1000)
             stat.wins = 0
             stat.losses = 0
             stat.games = 0
@@ -33,6 +48,9 @@ class RefreshCommand(LeaderboardCommand):
         Calculates updated elo ratings for the players involved in the match.
         """
         elo_1, elo_2, elo_3, elo_4 = list(map(lambda x: x.elo, stats))
+        games_1, games_2, games_3, games_4 = \
+            list(map(lambda x: x.games, stats))
+
         # Teams are considered as single players, averaging their Elo.
         team_a_avg = 0.5 * (elo_1 + elo_2)
         team_b_avg = 0.5 * (elo_3 + elo_4)
@@ -44,12 +62,16 @@ class RefreshCommand(LeaderboardCommand):
         # K-factor multiplier to account for larger margins.
         score_diff = abs(score_a - score_b)
         mult = 1
-        # if score_diff == 2:
-        #     mult = 1.5
         if 3 <= score_diff <= 4:
             mult = 1.5
         elif 5 <= score_diff:
             mult = 1.75
+
+        # games_12 = 0.5 * (games_1 + games_2)
+        # games_34 = 0.5 * (games_3 + games_4)
+        # numerator = 1 if games_12 == games_34 == 0\
+        # else min(games_12, games_34)
+        # game_mult = numerator / max(1, max(games_12, games_34))
 
         elo_delta = mult * settings.K * (score_p_a - expected_a)
         return (elo_1 + elo_delta, elo_2 + elo_delta,
@@ -62,7 +84,7 @@ class RefreshCommand(LeaderboardCommand):
 
         for j in range(n_records):
             record = records[j]
-            print(f"Updating: {record}")
+            # print(f"Updating: {record}")
             stats = Stats.query.all()
             stats_dict = {stat.name: stat for stat in stats}
             stats = [stats_dict[record.player_1],
@@ -91,4 +113,6 @@ class RefreshCommand(LeaderboardCommand):
                     player.losses = Stats.losses + 1
                 player.elo = elo
                 db.session.commit()
+
+            print(f"Updated: {record}")
         return None
