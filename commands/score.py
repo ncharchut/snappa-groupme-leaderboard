@@ -1,4 +1,5 @@
 import os
+import numpy as np
 from commands import settings
 
 from commands.command import BaseCommand
@@ -14,7 +15,7 @@ class ScoreCommand(BaseCommand):
         self.players = self.get_players()
         self.scores = self.get_scores()
         self.check = check
-        self.elo_delta = [0 for _ in range(settings.NUM_PLAYERS)]
+        self.elo_delta = 0
 
     def get_players(self):
         if not self.ok:
@@ -36,10 +37,11 @@ class ScoreCommand(BaseCommand):
             return
         return list(map(int, self.parsed.args))
 
-    def calculate_elo(self, stats: List, scores):
+    def calculate_elo(self, stats: List):
         """
         Calculates updated elo ratings for the players involved in the match.
         """
+        score_a, score_b = self.scores
         elo_1, elo_2, elo_3, elo_4 = list(map(lambda x: x.elo, stats))
         games_1, games_2, games_3, games_4 = \
             list(map(lambda x: x.games, stats))
@@ -50,23 +52,36 @@ class ScoreCommand(BaseCommand):
         expected_a = 1 / (1 + 10 ** ((team_b_avg - team_a_avg) / 400))
 
         # Win probability is the # points a team scorse divided by the total.
-        score_a, score_b = self.scores
-        score_p_a = score_a / (score_a + score_b)
-
-        # K-factor multiplier to account for larger margins.
         score_diff = abs(score_a - score_b)
         mult = 1
-        if 3 <= score_diff <= 4:
-            mult = 1.5
-        elif 5 <= score_diff:
+        lose_a = score_a < score_b
+
+        # K-factor multiplier to account for larger margins.
+        # 7-3, 7-4, 7-5
+        if 2 <= score_diff <= 4 and (max(score_a, score_b) >
+                                     settings.MIN_SCORE_TO_WIN):
+            mult = 1.25
+            score_a = score_a if not lose_a else 5
+            score_b = score_b if lose_a else 5
+        # 7-1, 7-2
+        elif 5 <= score_diff <= 6:
             mult = 1.75
+            score_a = score_a if not lose_a else 2
+            score_b = score_b if lose_a else 2
+        # 7-0
+        elif score_diff == 7:
+            mult = 2
 
-        # games_12 = 0.5 * (games_1 + games_2)
-        # games_34 = 0.5 * (games_3 + games_4)
-        # game_mult = (1 + min(games_12, games_34)) /\
-        #     max(1, max(games_12, games_34))
+        score_p_a = score_a / (score_a + score_b)
 
-        elo_delta = mult * settings.K * (score_p_a - expected_a)
+        games_12 = 0.5 * (games_1 + games_2)
+        games_34 = 0.5 * (games_3 + games_4)
+        game_mult = 1 / (1 + np.exp(-max(1, min(games_12, games_34)) /
+                                    max(1, max(games_12, games_34))))
+        game_mult = 1 if games_12 >= 20 and games_34 >= 20 else game_mult
+
+        elo_delta = game_mult * mult * settings.K * (score_p_a - expected_a)
+        self.elo_delta = elo_delta
         return (elo_1 + elo_delta, elo_2 + elo_delta,
                 elo_3 - elo_delta, elo_4 - elo_delta)
 
@@ -122,7 +137,7 @@ class ScoreCommand(BaseCommand):
         # Not recording personal stats like this for now.
         sinks = [0, 0, 0, 0]
         points = [0, 0, 0, 0]
-        new_scores = Score(*self.players, *self.scores, points, sinks,
+        new_scores = Score(*self.players, *self.scores,
                            self.timestamp, *updated_elos)
 
         # Update player stats.

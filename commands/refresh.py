@@ -2,6 +2,7 @@ from commands.models import Score, Stats
 from commands.leaderboard import LeaderboardCommand
 from commands import settings
 from typing import List
+import numpy as np
 import csv
 
 
@@ -42,6 +43,9 @@ class RefreshCommand(LeaderboardCommand):
             record.elo_4 = 1000
 
         db.session.commit()
+        # REMOVE AFTER DEBUGGING
+        for record in Stats.query.order_by(Stats.name).all():
+            print(record)
 
     def calculate_elo(self, stats: List, score_a, score_b):
         """
@@ -57,23 +61,35 @@ class RefreshCommand(LeaderboardCommand):
         expected_a = 1 / (1 + 10 ** ((team_b_avg - team_a_avg) / 400))
 
         # Win probability is the # points a team scorse divided by the total.
-        score_p_a = score_a / (score_a + score_b)
-
-        # K-factor multiplier to account for larger margins.
         score_diff = abs(score_a - score_b)
         mult = 1
-        if 3 <= score_diff <= 4:
-            mult = 1.5
-        elif 5 <= score_diff:
+        lose_a = score_a < score_b
+
+        # K-factor multiplier to account for larger margins.
+        # 7-3, 7-4, 7-5
+        if 2 <= score_diff <= 4 and (max(score_a, score_b) >
+                                     settings.MIN_SCORE_TO_WIN):
+            mult = 1.25
+            score_a = score_a if not lose_a else 5
+            score_b = score_b if lose_a else 5
+        # 7-1, 7-2
+        elif 5 <= score_diff <= 6:
             mult = 1.75
+            score_a = score_a if not lose_a else 2
+            score_b = score_b if lose_a else 2
+        # 7-0
+        elif score_diff == 7:
+            mult = 2
 
-        # games_12 = 0.5 * (games_1 + games_2)
-        # games_34 = 0.5 * (games_3 + games_4)
-        # numerator = 1 if games_12 == games_34 == 0\
-        # else min(games_12, games_34)
-        # game_mult = numerator / max(1, max(games_12, games_34))
+        score_p_a = score_a / (score_a + score_b)
 
-        elo_delta = mult * settings.K * (score_p_a - expected_a)
+        games_12 = 0.5 * (games_1 + games_2)
+        games_34 = 0.5 * (games_3 + games_4)
+        game_mult = 1 / (1 + np.exp(-max(1, min(games_12, games_34)) /
+                                    max(1, max(games_12, games_34))))
+        game_mult = 1 if games_12 >= 20 and games_34 >= 20 else game_mult
+
+        elo_delta = game_mult * mult * settings.K * (score_p_a - expected_a)
         return (elo_1 + elo_delta, elo_2 + elo_delta,
                 elo_3 - elo_delta, elo_4 - elo_delta)
 

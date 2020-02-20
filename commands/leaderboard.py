@@ -23,8 +23,8 @@ class LeaderboardCommand(BaseCommand):
 
         for player in elos:
             name: str = player.name
-            elo: int = player.elo
-            msg += (f"{str(elo).rjust(4)}   -   {name}   ({player.wins} -"
+            elo_str: str = f"{player.elo:.0f}"
+            msg += (f"{elo_str.rjust(4)}   -   {name}   ({player.wins} -"
                     f" {player.losses})\n")
 
         return msg
