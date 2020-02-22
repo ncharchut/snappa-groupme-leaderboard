@@ -12,6 +12,7 @@ class ScoreCommand(BaseCommand):
 
     def __init__(self, message, check=False):
         super().__init__(message)
+        self.invalid = False
         self.players = self.get_players()
         self.scores = self.get_scores()
         self.check = check
@@ -19,6 +20,11 @@ class ScoreCommand(BaseCommand):
 
     def get_players(self):
         if not self.ok:
+            return
+
+        if (len(self.parsed.mentions) > settings.NUM_PLAYERS or
+                len(self.parsed.mentions) < settings.NUM_PLAYERS - 1):
+            self.invalid = True
             return
 
         ids = map(lambda x: x.split('%'),
@@ -30,7 +36,12 @@ class ScoreCommand(BaseCommand):
             if player == "me":
                 self.mentions.insert(i, self.get_sender())
 
-        return [convert_dict[id] for id in self.mentions]
+        players = [convert_dict.get(id, None) for id in self.mentions]
+
+        if None in players or len(players) != settings.NUM_PLAYERS:
+            self.invalid = True
+
+        return players
 
     def get_scores(self):
         if not self.ok:
@@ -90,6 +101,10 @@ class ScoreCommand(BaseCommand):
             return (("Must be of form:\n /score @A @B @C @D, "
                      "score_ab - score_cd"))
 
+        if self.invalid:
+            return ("Error processing. Likely someone isn't added, or"
+                    " format isn't correct. Try `/help` if you're uncertain.")
+
         if self.check:
             return "Waiting for approval."
 
@@ -126,7 +141,7 @@ class ScoreCommand(BaseCommand):
         return msg
 
     def generate_data(self, db):
-        if not self.ok or self.check:
+        if (not self.ok) or self.check or self.invalid:
             return None
 
         # Read in current stats, calculate elo, update current rankings.
@@ -135,8 +150,6 @@ class ScoreCommand(BaseCommand):
         updated_elos = self.calculate_elo(stats)
 
         # Not recording personal stats like this for now.
-        sinks = [0, 0, 0, 0]
-        points = [0, 0, 0, 0]
         new_scores = Score(*self.players, *self.scores,
                            self.timestamp, *updated_elos)
 

@@ -20,7 +20,7 @@ def parse_input(raw_string: str) -> Any:
     try:
         res: List = total.parseString(raw_string)
         return True, res
-    except Exception:
+    except:
         return False, settings.ERR
 
 
@@ -86,7 +86,7 @@ def add_user(raw_string: str) -> Any:
 
 
 if __name__ == "__main__":
-    string = "/add @Pam duke, Pam Duke"
-    _, res = parse_input(string)
-    print(res.args)
+    string = "/add @Tommy Bannan, Tom Tom Bam Bam"
+    _, res = parse_input("/scoreboard @me @test")
+    print(res.mentions)
     print(res)

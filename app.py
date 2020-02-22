@@ -73,6 +73,11 @@ def webhook() -> Response:
         messages = filter_messages_for_scores(messages)
         for msg in messages:
             commands.append(ScoreCommand(msg))
+        if len(messages) == 0:
+            resp = "No `/score` messages in the last 20 messages."
+            print(resp)
+            if not app.debug:
+                reply(resp)
     elif (text.startswith(gm.HELP_V)):
         commands.append(HelpCommand(message, verbose=True))
     elif (text.startswith(gm.HELP)):
@@ -130,7 +135,7 @@ def get_messages_before_id(before_id: str) -> Dict:
     url = f'https://api.groupme.com/v3/groups/{group_id}/messages'
     params = {'before_id': str(before_id),
               'token': token,
-              'limit': 10}
+              'limit': 20}
 
     msg_rqst = requests.get(url, params=params)
     return msg_rqst.json()['response']

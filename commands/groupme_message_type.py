@@ -25,7 +25,7 @@ HELP_STRING_V = ("Sup, bitches. It's ScoreBot. Here's the lowdown.\n\n"
                  "Games must be to 7, win by 2, no questions."
                  " Drinking thirds will always hold unless all "
                  "both parties agree on a different amount (does not apply"
-                 " in tournament settings."
+                 " in tournament settings)."
                  " That's all from me, let's toss some dye.")
 
 HELP_STRING = (f"To score a match: \n"
