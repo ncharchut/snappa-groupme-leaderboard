@@ -1,6 +1,6 @@
 import commands.groupme_message_type as gm
 from pyparsing import Word, OneOrMore, Group,\
-    Optional, nums, alphanums, Suppress, CaselessKeyword
+    Optional, nums, alphanums, Suppress, CaselessKeyword, printables
 from pyparsing import pyparsing_common as cmn
 from typing import Any, List
 import settings
@@ -13,14 +13,14 @@ def parse_input(raw_string: str) -> Any:
         .setResultsName('mentions*')
 
     args_delim = Suppress(',')
-    args = OneOrMore(Word(alphanums) + Optional(Suppress('-')))\
-        .setResultsName('args')
+    args = OneOrMore((Word(alphanums) + Optional(Suppress('-'))) |
+                     Word(printables)).setResultsName('args')
     total = command + Optional(OneOrMore(mention) +
                                Optional(args_delim + args))
     try:
         res: List = total.parseString(raw_string)
         return True, res
-    except:
+    except Exception:
         return False, settings.ERR
 
 

@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Tuple
 from commands.score import ScoreCommand
 from commands.leaderboard import LeaderboardCommand
 from commands.add_user import AddCommand
+from commands.botch import BotchCommand
 from commands.help import HelpCommand
 from commands.models import Score
 from commands.partner import PartnerCommand
@@ -78,6 +79,12 @@ def webhook() -> Response:
             print(resp)
             if not app.debug:
                 reply(resp)
+    elif (text.startswith(gm.BOTCH)):
+        commands.append(BotchCommand(message) if sender in admin else
+                        BotchCommand(message, admin=False))
+    elif (text.startswith(gm.UNBOTCH)):
+        commands.append(BotchCommand(message, unbotch=True) if sender in admin
+                        else BotchCommand(message, unbotch=True, admin=False))
     elif (text.startswith(gm.HELP_V)):
         commands.append(HelpCommand(message, verbose=True))
     elif (text.startswith(gm.HELP)):
