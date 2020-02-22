@@ -43,7 +43,8 @@ class AddCommand(BaseCommand):
             return None
 
         mentioned: str = self.mentions[0]
-        if mentioned in current_users:
+        names = set([stat.name for stat in Stats.query.all()])
+        if mentioned in current_users or mentioned in names:
             self.note = "User already added."
             return None
 
