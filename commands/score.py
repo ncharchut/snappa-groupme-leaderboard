@@ -127,7 +127,9 @@ class ScoreCommand(BaseCommand):
         lose_1 = f"L: {d_1}  "
         win_2 = f"W: {d_2}  "
         lose_2 = f"L: {d_2}  "
-        msg: str = (f"Match recorded, score of {score_1} - {score_2}.\n"
+        match_id = Score.query.order_by(Score.id.desc()).first()
+        msg: str = (f"Match {match_id.id} recorded, "
+                    f"score of {score_1} - {score_2}.\n"
                     "-------------------------\n"
                     f"{win_1 if score_1 > score_2 else lose_1}"
                     f"{player_1}, {player_2}\n"

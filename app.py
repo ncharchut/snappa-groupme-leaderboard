@@ -16,6 +16,7 @@ from commands.models import Score
 from commands.partner import PartnerCommand
 from commands.refresh import RefreshCommand
 from commands.scoreboard import ScoreboardCommand
+from commands.strike import StrikeCommand
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from database import db
@@ -85,6 +86,9 @@ def webhook() -> Response:
     elif (text.startswith(gm.UNBOTCH)):
         commands.append(BotchCommand(message, unbotch=True) if sender in admin
                         else BotchCommand(message, unbotch=True, admin=False))
+    elif (text.startswith(gm.STRIKE)):
+        commands.append(StrikeCommand(message) if sender in admin else
+                        StrikeCommand(message, admin=False))
     elif (text.startswith(gm.HELP_V)):
         commands.append(HelpCommand(message, verbose=True))
     elif (text.startswith(gm.HELP)):
@@ -105,14 +109,16 @@ def webhook() -> Response:
 
     for command in commands:
         data = command.generate_data(db)
-        note = command.generate_message()
-        print(note)
 
         if not app.debug:
             if data is not None:
                 db.session.add(data)
-                db.session.commit()
+            db.session.commit()
+
+        note = command.generate_message()
+        if not app.debug:
             reply(note)
+        print(note)
 
     return 'ok', 200
 
