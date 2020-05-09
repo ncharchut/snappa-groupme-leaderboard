@@ -24,7 +24,17 @@ person who checks rankings after every game. Have to keep that chat *_clean_*.
 ## Todo
 - [x] Score/input validation.
 - [x] Set up Postgres database and record matches using the above command.
-- [ ] Add admin functionality to strike games from the record.
+- [x] Add admin functionality to strike games from the record.
 - [x] Additional functionalities (e.g. mugs/sinks per game)
-- [ ] Make it work for 1 v. 1 games.
+- [ ] Scripts
+  - [ ] Script for creating GroupMe bot.
+  - [ ] Script for downloading/setting up/deploying Heroku App.
+  - [ ] Script for pushing/defining any remaining configuration variables.
 - [ ] Update README with how to deploy easily.
+
+## Setup Locally
+1. Clone/fork this repository. If cloning/messing around with it, *be sure to push to your GitHub account*.
+2. Setup a Heroku account [here](https://signup.heroku.com/login).
+3. Create a new Heroku app with whatever app name you'd like (ideal if it's SFW because this is public-facing).
+4. Add the *Heroku Postgres* Add-on (free) and make sure your Dyno Type includes `web gunicorn app:app --log-file=-`
+5. Create a GroupMe bot using the [official website](https://dev.groupme.com/). You may need to create a developer account. Note both the **BOT ID** and **GROUP ID**, you will need these.
