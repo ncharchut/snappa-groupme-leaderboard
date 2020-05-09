@@ -28,8 +28,9 @@ person who checks rankings after every game. Have to keep that chat *_clean_*.
 - [x] Additional functionalities (e.g. mugs/sinks per game)
 - [ ] Scripts
   - [ ] Script for creating GroupMe bot.
-  - [ ] Script for downloading/setting up/deploying Heroku App.
+  - [ ] Script for downloading/setting up/deploying Heroku App and CLI tools.
   - [ ] Script for pushing/defining any remaining configuration variables.
+  - [ ] Script that does all of the above in one go.
 - [ ] Update README with how to deploy easily.
 
 ## Setup Locally
