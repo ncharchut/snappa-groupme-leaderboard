@@ -31,7 +31,8 @@ person who checks rankings after every game. Have to keep that chat *_clean_*.
   - [ ] Script that does all of the above in one go.
 - [ ] Update README with how to deploy easily.
 
-## Setup Locally
+## Setup Locally (MacOS)
+0. Make sure you have `git` and `homebrew` installed.
 1. Clone/fork this repository. If cloning/messing around with it, *be sure to push to your GitHub account*.
 2. Setup a Heroku account [here](https://signup.heroku.com/login).
 3. Create a new Heroku app with whatever app name you'd like (ideal if it's SFW because this is public-facing).
