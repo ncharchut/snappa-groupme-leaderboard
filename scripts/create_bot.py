@@ -16,6 +16,7 @@ def create_new_group():
 
     msg_rqst = requests.post(url, params=params)
     group = msg_rqst.json()['response']
+    print(f"URL to join: {group['share_url']}")
 
     return group
 
@@ -71,9 +72,9 @@ def add_self_to_admin_variable(group):
 
     msg_rqst = requests.get(url, params=params)
     groupme_id = msg_rqst.json()['response']['id']
-    name = input("Enter your full name for record-keeping: ")
-    subprocess.call(["heroku", "config:set", f"IDS={groupme_id}%{name}"])
-    subprocess.call(["heroku", "config:set", f"ADMIN={groupme_id}"])
+    subprocess.call(["heroku", "config:set",
+                     f"ADMIN={groupme_id}"],
+                    stdout=subprocess.DEVNULL)
 
 
 def configure_bot(group):
@@ -101,7 +102,8 @@ def configure_group():
 
     print("Setting config variables in Heroku...")
     subprocess.call(["heroku", "config:set",
-                    f"GROUPME_GROUP_ID={group['id']}"])
+                    f"GROUPME_GROUP_ID={group['id']}"],
+                    stdout=subprocess.DEVNULL)
     add_self_to_admin_variable(group)
     return group
 
@@ -109,7 +111,9 @@ def configure_group():
 def main():
     group = configure_group()
     bot_id = configure_bot(group)
-    subprocess.call(["heroku", "config:set", f"BOT_ID={bot_id}"])
+    subprocess.call(["heroku", "config:set",
+                     f"BOT_ID={bot_id}"],
+                    stdout=subprocess.DEVNULL)
     post_bot_message(bot_id, "It works!")
 
 
