@@ -48,7 +48,7 @@ def webhook() -> Response:
         str: 'ok' or 'not ok'.
     """
     message: Dict[str, Any] = request.get_json()
-    admin: List[str] = os.getenv('ADMIN').split(':')
+    admin: List[str] = os.getenv('ADMIN', '').split(':')
 
     sender: str = message.get('sender_id', None)
     text: str = message.get('text', None)
