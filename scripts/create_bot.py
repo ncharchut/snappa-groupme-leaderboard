@@ -1,5 +1,6 @@
 import os
 import requests
+import subprocess
 
 
 def create_new_group():
@@ -89,16 +90,9 @@ def configure_group():
 
 
 def main():
-    # access_token = input("Access token: ")
-    # if access_token != '':
-    #     os.environ["ACCESS_TOKEN"] = access_token
-
-    # TODO: config script for access token, and callback url.
-
     group = configure_group()
     bot_id = configure_bot(group)
-
-    post_bot_message(bot_id, "it works!")
+    subprocess.call(["heroku", "config:set", f"BOT_ID={bot_id}"])
 
 
 if __name__ == "__main__":

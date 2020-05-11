@@ -12,7 +12,8 @@ heroku:
 		echo "CALLBACK_URL=https://$$app.herokuapp.com" >> .env &&\
 		heroku addons:create heroku-postgresql:hobby-dev --app $$app &&\
 		heroku git:remote -a $$app &&\
-		heroku config:set CALLBACK_URL=https://$$app.herokuapp.com
+		heroku config:set CALLBACK_URL=https://$$app.herokuapp.com &&\
+		git push heroku master
 
 pipenv:
 	@echo "Installing pipenv..."
