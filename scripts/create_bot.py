@@ -8,7 +8,7 @@ def create_new_group():
     sharable_link = input("Sharable link? (y/n): ").lower()
     share = sharable_link == 'y'
 
-    token = os.environ.get("ACCESS_TOKEN")
+    token = os.environ.get("GROUPME_ACCESS_TOKEN")
     url = f"https://api.groupme.com/v3/groups"
     params = {'name': name,
               'share': share,
@@ -21,7 +21,7 @@ def create_new_group():
 
 
 def post_bot_message(bot_id, text):
-    token = os.environ.get("ACCESS_TOKEN")
+    token = os.environ.get("GROUPME_ACCESS_TOKEN")
     url = "https://api.groupme.com/v3/bots/post"
     params = {'text': text,
               'bot_id': bot_id,
@@ -33,7 +33,7 @@ def post_bot_message(bot_id, text):
 def create_new_bot(group_id):
     name = input("Bot name: ")
 
-    token = os.environ.get("ACCESS_TOKEN")
+    token = os.environ.get("GROUPME_ACCESS_TOKEN")
     callback_url = os.environ.get("CALLBACK_URL")
     url = "https://api.groupme.com/v3/bots"
     data = {'bot': {'name': name,
@@ -48,7 +48,7 @@ def create_new_bot(group_id):
 
 
 def get_groupme_groups():
-    token = os.environ.get("ACCESS_TOKEN")
+    token = os.environ.get("GROUPME_ACCESS_TOKEN")
     url = f"https://api.groupme.com/v3/groups"
     params = {'token': token}
 
@@ -62,6 +62,18 @@ def get_groupme_groups():
                                            group['members']))})
 
     return groups
+
+
+def add_self_to_admin_variable(group):
+    token = os.environ.get("GROUPME_ACCESS_TOKEN")
+    url = f"https://api.groupme.com/v3/users/me"
+    params = {'token': token}
+
+    msg_rqst = requests.get(url, params=params)
+    groupme_id = msg_rqst.json()['response']['id']
+    name = input("Enter your full name for record-keeping: ")
+    subprocess.call(["heroku", "config:set", f"IDS={groupme_id}%{name}"])
+    subprocess.call(["heroku", "config:set", f"ADMIN={groupme_id}"])
 
 
 def configure_bot(group):
@@ -86,6 +98,11 @@ def configure_group():
         group = groups[group_choice_idx]
     else:
         group = create_new_group()
+
+    print("Setting config variables in Heroku...")
+    subprocess.call(["heroku", "config:set",
+                    f"GROUPME_GROUP_ID={group['id']}"])
+    add_self_to_admin_variable(group)
     return group
 
 
@@ -93,6 +110,7 @@ def main():
     group = configure_group()
     bot_id = configure_bot(group)
     subprocess.call(["heroku", "config:set", f"BOT_ID={bot_id}"])
+    post_bot_message(bot_id, "It works!")
 
 
 if __name__ == "__main__":

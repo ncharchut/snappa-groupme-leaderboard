@@ -15,13 +15,12 @@ class AddCommand(BaseCommand):
 
     def set_config_var(self, var: str, value: Any) -> None:
         url = settings.URL
-        token = os.environ.get('HEROKU_TOKEN')
+        token = os.environ.get('HRKU_TOKEN')
         data = {var: value}
         headers = {'Authorization': f"Bearer {token}",
                    'Accept': 'application/vnd.heroku+json; version=3',
                    'Content-Type': 'application/json'}
 
-        # This denotes a successful request.
         response = requests.patch(url, headers=headers, json=data)
         return response.status_code == 200
 
@@ -35,16 +34,18 @@ class AddCommand(BaseCommand):
             return None
 
         raw_string: str = os.environ.get('IDS', '')
-        ids = map(lambda x: x.split('%'),
-                  raw_string.split(':'))
-        current_users = set([id for [id, _] in ids])
+        self_add = False
         if len(self.mentions) == 0:
-            self.note = "No tags detected, try again."
-            return None
+            if (len(self.parsed.mentions) > 0) and\
+                    (self.parsed.mentions[0] == 'me'):
+                self_add = True
+            else:
+                self.note = "No tags detected, try again."
+                return None
 
-        mentioned: str = self.mentions[0]
+        mentioned: str = self.get_sender() if self_add else self.mentions[0]
         names = set([stat.name for stat in Stats.query.all()])
-        if mentioned in current_users or mentioned in names:
+        if mentioned in names:
             self.note = "User already added."
             return None
 

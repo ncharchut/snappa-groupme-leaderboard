@@ -30,7 +30,6 @@ if app.debug:
 # Initializing the app.
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 heroku = Heroku(app)
-# db = SQLAlchemy(app)
 db.init_app(app)
 init_rank = False
 
@@ -144,7 +143,7 @@ def get_messages_before_id(before_id: str) -> Dict:
     with id equal to `before_id`.
     """
     group_id = os.environ.get('GROUPME_GROUP_ID')
-    token = os.environ.get('ACCESS_TOKEN')
+    token = os.environ.get('GROUPME_ACCESS_TOKEN')
     url = f'https://api.groupme.com/v3/groups/{group_id}/messages'
     params = {'before_id': str(before_id),
               'token': token,

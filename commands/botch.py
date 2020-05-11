@@ -16,7 +16,7 @@ class BotchCommand(BaseCommand):
 
     def set_config_var(self, var: str, value: Any) -> None:
         url = settings.URL
-        token = os.environ.get('HEROKU_TOKEN')
+        token = os.environ.get('HRKU_TOKEN')
         data = {var: value}
         headers = {'Authorization': f"Bearer {token}",
                    'Accept': 'application/vnd.heroku+json; version=3',
